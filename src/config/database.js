@@ -57,7 +57,44 @@ db.exec(`
     level TEXT DEFAULT 'INFO',
     message TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS lid_mappings (
+    lid TEXT PRIMARY KEY,
+    phone TEXT NOT NULL
+  );
 `);
+
+// Helpers para mapeamento de LID (Linked Device ID) para Telefone Real
+export function saveLidMapping(lid, phone) {
+  if (!lid || !phone) return;
+  const cleanLid = String(lid).replace(/\D/g, '');
+  const cleanPhone = String(phone).replace(/\D/g, '');
+  if (!cleanLid || !cleanPhone) return;
+
+  try {
+    db.prepare(`
+      INSERT INTO lid_mappings (lid, phone)
+      VALUES (?, ?)
+      ON CONFLICT(lid) DO UPDATE SET phone = excluded.phone
+    `).run(cleanLid, cleanPhone);
+  } catch (err) {
+    console.error('Erro ao salvar mapeamento LID-Phone:', err);
+  }
+}
+
+export function getPhoneByLid(lid) {
+  if (!lid) return null;
+  const cleanLid = String(lid).replace(/\D/g, '');
+  const row = db.prepare('SELECT phone FROM lid_mappings WHERE lid = ?').get(cleanLid);
+  return row ? row.phone : null;
+}
+
+export function getLidByPhone(phone) {
+  if (!phone) return null;
+  const cleanPhone = String(phone).replace(/\D/g, '');
+  const row = db.prepare('SELECT lid FROM lid_mappings WHERE phone = ?').get(cleanPhone);
+  return row ? row.lid : null;
+}
 
 // Helpers for Settings
 export function getSetting(key, defaultValue = '') {

@@ -1,4 +1,4 @@
-import { db, logMessage } from '../config/database.js';
+import { db, logMessage, getPhoneByLid } from '../config/database.js';
 import { arePhonesEqual, normalizePhone } from '../utils/formatter.js';
 
 /**
@@ -182,17 +182,35 @@ export function deleteSchedule(id) {
 /**
  * Localiza itens pendentes do cronograma atribuídos a um determinado número de telefone.
  */
-export function getPendingItemsForPhone(senderPhone) {
+export function getResponsiblePhonesForOpenItems() {
+  const rows = db.prepare(`
+    SELECT DISTINCT responsible_phone
+    FROM schedule_items
+    WHERE is_immutable = 0
+      AND responsible_phone IS NOT NULL
+      AND responsible_phone <> ''
+  `).all();
+
+  return rows.map(row => row.responsible_phone).filter(Boolean);
+}
+
+export function getPendingItemsForPhone(senderPhone, alternativePhones = []) {
   const allSchedules = getAllSchedules();
   const matched = [];
+
+  const phonesToCheck = [senderPhone, ...alternativePhones].filter(Boolean);
+  const mappedPhone = getPhoneByLid(senderPhone);
+  if (mappedPhone) {
+    phonesToCheck.push(mappedPhone);
+  }
 
   for (const schedule of allSchedules) {
     for (const item of schedule.items) {
       // Ignora itens imutáveis
       if (item.is_immutable) continue;
 
-      // Verifica se o telefone do remetente bate com o telefone do responsável
-      if (arePhonesEqual(senderPhone, item.responsible_phone)) {
+      // Verifica se o telefone do remetente (ou PN resolvido a partir do LID) bate com o telefone do responsável
+      if (phonesToCheck.some(phone => arePhonesEqual(phone, item.responsible_phone))) {
         matched.push({
           ...item,
           schedule_title: schedule.title,

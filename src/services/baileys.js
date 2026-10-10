@@ -1,5 +1,6 @@
 import makeWASocket, {
   DisconnectReason,
+  isLidUser,
   useMultiFileAuthState
 } from '@whiskeysockets/baileys';
 import QRCode from 'qrcode';
@@ -7,12 +8,12 @@ import qrcodeTerminal from 'qrcode-terminal';
 import pino from 'pino';
 import fs from 'node:fs';
 import { config } from '../config/env.js';
-import { logMessage, getSetting } from '../config/database.js';
-import { jidToPhone, phoneToJid, arePhonesEqual } from '../utils/formatter.js';
+import { logMessage, saveLidMapping, getPhoneByLid } from '../config/database.js';
+import { jidToPhone, phoneToJid } from '../utils/formatter.js';
 import { enqueueMessage, getConversationHistory, appendConversationHistory } from '../utils/debouncer.js';
 import { extractYouTubeUrls, getYouTubeVideoTitle } from './playwright.js';
 import { processMessageWithGemini } from './gemini.js';
-import { getPendingItemsForPhone, updateScheduleItemContent } from './scheduleManager.js';
+import { getPendingItemsForPhone, getResponsiblePhonesForOpenItems, updateScheduleItemContent } from './scheduleManager.js';
 
 let sock = null;
 let currentQrCodeDataUrl = null;
@@ -138,12 +139,20 @@ async function handleIncomingMessage(msg) {
 
     if (!text || !text.trim()) return;
 
-    const senderPhone = jidToPhone(remoteJid);
-    logMessage('INFO', `[WhatsApp] Mensagem recebida de ${senderPhone}: "${text.slice(0, 80)}"`);
+    const senderIdentity = await resolveSenderIdentity(msg);
+    logMessage('INFO', `[WhatsApp] Mensagem recebida de ${senderIdentity.logLabel}: "${text.slice(0, 80)}"`);
+    if (senderIdentity.lid && !senderIdentity.primaryPhone) {
+      const resolvedPhone = await resolveUnknownLidByResponsiblePhones(senderIdentity.lid);
+      if (resolvedPhone) {
+        senderIdentity.primaryPhone = resolvedPhone;
+        senderIdentity.debounceKey = resolvedPhone;
+        senderIdentity.logLabel = `${resolvedPhone} (LID ${senderIdentity.lid})`;
+      }
+    }
 
     // 4. Enfileira a mensagem no debouncer de 10 segundos para mensagens picadas
-    enqueueMessage(senderPhone, text, async (combinedText) => {
-      await processDebouncedMessage(remoteJid, senderPhone, combinedText);
+    enqueueMessage(senderIdentity.debounceKey, text, async (combinedText) => {
+      await processDebouncedMessage(remoteJid, senderIdentity, combinedText);
     });
   } catch (err) {
     logMessage('ERROR', `[WhatsApp] Erro no processamento de mensagem: ${err.message}`);
@@ -151,20 +160,113 @@ async function handleIncomingMessage(msg) {
 }
 
 /**
+ * Resolve a identidade real do remetente quando o WhatsApp entrega mensagens usando LID (@lid)
+ * em vez do número de telefone tradicional (@s.whatsapp.net).
+ */
+async function resolveSenderIdentity(msg) {
+  const candidates = [
+    msg.key.remoteJid,
+    msg.key.remoteJidAlt,
+    msg.key.participant,
+    msg.key.participantAlt
+  ].filter(Boolean);
+
+  let lid = '';
+  let lidJid = '';
+  const phoneCandidates = [];
+
+  for (const jid of candidates) {
+    if (isLidUser(jid) || jid.endsWith('@lid') || jid.includes('@lid')) {
+      lid = jidToPhone(jid);
+      lidJid = jid;
+    } else if (jid.endsWith('@s.whatsapp.net') || jid.endsWith('@c.us')) {
+      phoneCandidates.push(jidToPhone(jid));
+    }
+  }
+
+  // Se o Baileys já armazenou o relacionamento LID -> PN, usa essa fonte oficial primeiro.
+  if (lidJid && sock?.signalRepository?.lidMapping?.getPNForLID) {
+    try {
+      const pnJid = await sock.signalRepository.lidMapping.getPNForLID(lidJid);
+      if (pnJid) {
+        const resolvedPhone = jidToPhone(pnJid);
+        phoneCandidates.unshift(resolvedPhone);
+        saveLidMapping(lid, resolvedPhone);
+      }
+    } catch (err) {
+      logMessage('WARN', `[WhatsApp] Não foi possível resolver PN para LID ${lidJid}: ${err.message}`);
+    }
+  }
+
+  // Fallback: mapeamento local persistido em SQLite.
+  if (lid) {
+    const mappedPhone = getPhoneByLid(lid);
+    if (mappedPhone) {
+      phoneCandidates.unshift(mappedPhone);
+    }
+  }
+
+  const uniquePhones = Array.from(new Set(phoneCandidates.filter(Boolean)));
+  const primaryPhone = uniquePhones[0] || '';
+  const alternativePhones = uniquePhones.slice(1);
+  const debounceKey = primaryPhone || lid || jidToPhone(msg.key.remoteJid || '');
+  const logLabel = primaryPhone
+    ? `${primaryPhone}${lid ? ` (LID ${lid})` : ''}`
+    : (lid ? `${lid} (LID sem PN resolvido)` : debounceKey);
+
+  return {
+    primaryPhone,
+    alternativePhones,
+    lid,
+    lidJid,
+    debounceKey,
+    logLabel
+  };
+}
+
+/**
+ * Tenta resolver um LID desconhecido consultando os responsáveis cadastrados em cronogramas abertos.
+ * Isso cobre casos em que a primeira mensagem chega só como @lid e o Baileys ainda não populou o mapping.
+ */
+async function resolveUnknownLidByResponsiblePhones(lid) {
+  if (!lid || !sock?.signalRepository?.lidMapping?.getLIDForPN) return null;
+
+  const lidDigits = jidToPhone(lid);
+  const responsiblePhones = getResponsiblePhonesForOpenItems();
+
+  for (const phone of responsiblePhones) {
+    try {
+      const lidJid = await sock.signalRepository.lidMapping.getLIDForPN(phoneToJid(phone));
+      if (lidJid && jidToPhone(lidJid) === lidDigits) {
+        saveLidMapping(lidDigits, phone);
+        logMessage('INFO', `[WhatsApp] LID ${lidDigits} associado ao telefone responsável ${phone}.`);
+        return phone;
+      }
+    } catch (err) {
+      logMessage('WARN', `[WhatsApp] Falha ao comparar LID ${lidDigits} com responsável ${phone}: ${err.message}`);
+    }
+  }
+
+  return null;
+}
+
+/**
  * Função executada após o término da janela de 10 segundos de espera por mensagens picadas.
  */
-async function processDebouncedMessage(remoteJid, senderPhone, combinedText) {
-  logMessage('INFO', `[Processamento] Processando mensagem acumulada de ${senderPhone}: "${combinedText.slice(0, 100)}"`);
+async function processDebouncedMessage(remoteJid, senderIdentity, combinedText) {
+  logMessage('INFO', `[Processamento] Processando mensagem acumulada de ${senderIdentity.logLabel}: "${combinedText.slice(0, 100)}"`);
 
-  // 1. Verifica se a pessoa é responsável por algum item do cronograma
-  // "O bot irá receber esses itens/momentos somente da pessoa que ficou responsável e preencher os dados desse cronograma."
-  const pendingItems = getPendingItemsForPhone(senderPhone);
+  // 1. Verifica se a pessoa é responsável por algum item do cronograma.
+  // Em contas recentes o WhatsApp pode entregar mensagens usando LID (@lid) em vez do número (@s.whatsapp.net).
+  // Por isso a busca considera: número resolvido via Baileys, número vindo do remoteJidAlt e mapeamentos LID salvos.
+  const pendingItems = getPendingItemsForPhone(senderIdentity.primaryPhone, senderIdentity.alternativePhones);
 
   if (!pendingItems || pendingItems.length === 0) {
-    logMessage('WARN', `[WhatsApp] Mensagem de ${senderPhone} ignorada: remetente não é responsável por nenhum momento de cronograma em aberto.`);
+    logMessage('WARN', `[WhatsApp] Mensagem de ${senderIdentity.logLabel} ignorada: remetente não é responsável por nenhum momento de cronograma em aberto.`);
     return;
   }
 
+  const historyKey = senderIdentity.primaryPhone || senderIdentity.lid || senderIdentity.debounceKey;
   const responsibleName = pendingItems[0]?.responsible_name || '';
 
   // 2. Verifica se a mensagem contém links do YouTube para extração de título com Playwright
@@ -179,7 +281,7 @@ async function processDebouncedMessage(remoteJid, senderPhone, combinedText) {
   }
 
   // 3. Carrega o histórico de conversa recente (reseta após 30min de inatividade)
-  const history = getConversationHistory(senderPhone);
+  const history = getConversationHistory(historyKey);
 
   // 4. Processa com a inteligência artificial do Gemini
   const aiResult = await processMessageWithGemini({
@@ -198,8 +300,8 @@ async function processDebouncedMessage(remoteJid, senderPhone, combinedText) {
   }
 
   // 6. Atualiza o histórico de conversas do contato
-  appendConversationHistory(senderPhone, 'user', combinedText);
-  appendConversationHistory(senderPhone, 'model', aiResult.reply_message);
+  appendConversationHistory(historyKey, 'user', combinedText);
+  appendConversationHistory(historyKey, 'model', aiResult.reply_message);
 
   // 7. Envia a resposta de confirmação de volta pelo WhatsApp
   await sendWhatsAppMessage(remoteJid, aiResult.reply_message);
