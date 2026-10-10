@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsBot Sonoplasta</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/css/styles.css">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#4f46e5',
+                        whatsapp: '#25D366'
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="min-h-screen relative pb-20 lg:pb-0">
+
+    <!-- Header -->
+    <header class="glass-card sticky top-0 z-50 border-b border-slate-700/50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-white shadow-lg">
+                    <i data-lucide="music" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-purple-300">WhatsBot Sonoplasta</h1>
+                    <p class="text-xs text-slate-400 font-medium">Gestão de Cronogramas e Automação de Cultos</p>
+                </div>
+            </div>
+
+            <!-- WhatsApp Status Badge -->
+            <div id="wa-status-badge" class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800 text-sm font-medium border border-slate-700 cursor-pointer hover:bg-slate-700 transition" onclick="app.showModal('whatsapp-modal')">
+                <div class="w-2 h-2 rounded-full bg-slate-500 badge-pulse" id="wa-status-dot"></div>
+                <span id="wa-status-text">Verificando...</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+
+        <!-- Alerts Area -->
+        <div id="alerts-container" class="space-y-3"></div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 relative">
+
+            <!-- Esquerda: Lista de Cronogramas -->
+            <div class="lg:col-span-2 space-y-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-2xl font-bold text-white flex items-center gap-2">
+                            <i data-lucide="calendar-days" class="w-6 h-6 text-indigo-400"></i> Cronogramas de Cultos
+                        </h2>
+                        <p class="text-slate-400 text-sm mt-1">Gerencie os horários, responsáveis e momentos dos cultos.</p>
+                    </div>
+                    <button onclick="app.openScheduleModal()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl text-sm font-semibold transition flex items-center gap-2 shadow-lg shadow-indigo-500/20">
+                        <i data-lucide="plus" class="w-4 h-4"></i> Criar Cronograma
+                    </button>
+                </div>
+
+                <!-- Empty State & Loading -->
+                <div id="schedules-loading" class="glass-card rounded-2xl p-12 text-center text-slate-400 animate-pulse">
+                    <i data-lucide="loader-2" class="w-8 h-8 mx-auto animate-spin mb-3 text-indigo-500"></i>
+                    Carregando cronogramas...
+                </div>
+
+                <div id="schedules-empty" class="hidden glass-card rounded-2xl p-12 text-center text-slate-400 border border-dashed border-slate-600">
+                    <div class="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center mx-auto mb-4">
+                        <i data-lucide="calendar-x" class="w-8 h-8 text-slate-500"></i>
+                    </div>
+                    <p class="font-medium text-lg text-slate-200">Nenhum cronograma cadastrado</p>
+                    <p class="text-sm mt-1 mb-6">Crie seu primeiro cronograma para começar a automatizar o WhatsApp.</p>
+                    <button onclick="app.openScheduleModal()" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm transition">
+                        Criar Agora
+                    </button>
+                </div>
+
+                <!-- Container dos Cronogramas -->
+                <div id="schedules-list" class="space-y-4"></div>
+            </div>
+
+            <!-- Direita: Configurações & Logs -->
+            <div class="space-y-6">
+                <!-- Card de Configuração Inteligente -->
+                <div class="glass-card rounded-2xl p-6 border-t-2 border-t-purple-500">
+                    <div class="flex items-center gap-2 mb-4">
+                        <i data-lucide="settings" class="w-5 h-5 text-purple-400"></i>
+                        <h3 class="font-bold text-lg text-white">Configurações Gerais</h3>
+                    </div>
+
+                    <form id="settings-form" class="space-y-4" onsubmit="app.saveSettings(event)">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Telefone do Sonoplasta</label>
+                            <input type="text" id="setting_sonoplasta_phone" placeholder="Ex: 5511999998888" class="w-full bg-slate-800 border-none rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 outline-none text-sm placeholder-slate-500">
+                            <span class="text-[10px] text-slate-500 block mt-1">O bot enviará o cronograma final pronto para você 1h antes do culto neste número. DDI + DDD + Número.</span>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Google Gemini API Key</label>
+                            <input type="password" id="setting_gemini_key" placeholder="A chave não é visível. Digite a nova para alterar." class="w-full bg-slate-800 border-none rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 outline-none text-sm placeholder-slate-500">
+                            <span class="text-[10px] text-slate-500 block mt-1">Usado para interpretar mensagens com IA. <a href="https://aistudio.google.com/" target="_blank" class="text-purple-400 hover:underline">Obter chave</a></span>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Nome do Bot</label>
+                            <input type="text" id="setting_bot_name" placeholder="WhatsBot Sonoplasta" class="w-full bg-slate-800 border-none rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 outline-none text-sm placeholder-slate-500">
+                        </div>
+
+                        <button type="submit" class="w-full bg-slate-700 hover:bg-slate-600 focus:bg-slate-600 text-white py-2 rounded-lg text-sm font-semibold transition active:scale-95 flex items-center justify-center gap-2">
+                            <i data-lucide="save" class="w-4 h-4"></i> Salvar Preferências
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Status & Logs da Máquina -->
+                <div class="glass-card rounded-2xl p-6 flex flex-col max-h-[450px]">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center gap-2">
+                            <i data-lucide="activity" class="w-5 h-5 text-emerald-400"></i>
+                            <h3 class="font-bold text-lg text-white">Atividade do Sistema</h3>
+                        </div>
+                        <button onclick="app.loadLogs()" class="text-slate-400 hover:text-white" title="Atualizar">
+                            <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+
+                    <div id="logs-container" class="flex-1 bg-slate-900/50 rounded-xl p-3 overflow-y-auto space-y-2 font-mono text-xs border border-slate-800 shadow-inner custom-scrollbar">
+                        <div class="text-slate-500 flex items-center gap-2 animate-pulse">
+                            <i data-lucide="loader" class="w-3 h-3 animate-spin"></i> Carregando logs ao vivo...
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </main>
+
+    <!-- Modals -->
+
+    <!-- WhatsApp Management Modal -->
+    <div id="whatsapp-modal" class="fixed inset-0 z-[60] hidden flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="app.hideModal('whatsapp-modal')"></div>
+        <div class="glass-card border border-slate-700 rounded-3xl w-full max-w-sm relative z-10 overflow-hidden shadow-2xl scale-95 opacity-0 transition-all duration-300" id="whatsapp-modal-content">
+            <div class="bg-gradient-to-b from-slate-800 to-slate-900/50 p-6 text-center pt-8">
+
+                <button onclick="app.hideModal('whatsapp-modal')" class="absolute top-4 right-4 text-slate-400 hover:text-white">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+
+                <div class="w-16 h-16 rounded-2xl bg-[#25D366]/10 flex items-center justify-center mx-auto mb-4 border border-[#25D366]/20">
+                    <i data-lucide="message-circle" class="w-8 h-8 text-[#25D366]"></i>
+                </div>
+
+                <h3 class="text-xl font-extrabold text-white mb-1">Status do WhatsApp</h3>
+                <p id="wa-modal-status-text" class="text-sm font-medium text-slate-400 mb-6">Verificando...</p>
+
+                <!-- Área Dinâmica -->
+                <div id="wa-modal-dynamic-area" class="min-h-[200px] flex flex-col items-center justify-center">
+
+                    <!-- Preloader -->
+                    <div id="wa-loader" class="animate-pulse flex flex-col items-center">
+                        <i data-lucide="loader-2" class="w-10 h-10 animate-spin text-indigo-400 mb-3"></i>
+                        <span class="text-sm text-slate-400">Aguarde...</span>
+                    </div>
+
+                    <!-- QR Code View -->
+                    <div id="wa-qr-view" class="hidden flex-col items-center w-full">
+                        <div class="bg-white p-3 rounded-2xl shadow-xl w-56 h-56 flex items-center justify-center mb-4 transition-all duration-300 transform hover:scale-105">
+                            <img id="wa-qr-img" src="" alt="WhatsApp QR Code" class="w-full h-full object-contain">
+                        </div>
+                        <ul class="text-xs text-left text-slate-300 space-y-1 mb-4">
+                            <li class="flex gap-2"><span>1.</span> Abra o <strong>WhatsApp</strong> no celular</li>
+                            <li class="flex gap-2"><span>2.</span> Toque em Mudar > <strong>Aparelhos Conectados</strong></li>
+                            <li class="flex gap-2"><span>3.</span> <strong>Aponte a câmera</strong> para esta tela</li>
+                        </ul>
+                    </div>
+
+                    <!-- Connected View -->
+                    <div id="wa-connected-view" class="hidden flex-col items-center w-full w-full">
+                        <div class="w-full bg-slate-800/80 rounded-xl p-4 border border-emerald-500/30 mb-6">
+                            <p class="text-xs text-slate-400 mb-1">Bot conectado com sucesso no número:</p>
+                            <p id="wa-connected-phone" class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-green-300 tracking-wider">551199999999</p>
+                        </div>
+
+                        <div class="w-full space-y-3">
+                            <button onclick="app.actionWhatsApp('restart')" class="w-full bg-slate-700 hover:bg-slate-600 text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition active:scale-95 flex items-center justify-center gap-2">
+                                <i data-lucide="refresh-ccw" class="w-4 h-4"></i> Reiniciar Conexão
+                            </button>
+                            <button onclick="app.actionWhatsApp('logout')" class="w-full bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 px-4 py-2.5 rounded-xl text-sm font-semibold transition active:scale-95 flex items-center justify-center gap-2 border border-rose-500/20">
+                                <i data-lucide="log-out" class="w-4 h-4"></i> Desconectar Conta
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Schedule Form Modal -->
+    <div id="schedule-modal" class="fixed inset-0 z-[60] hidden flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="app.hideModal('schedule-modal')"></div>
+        <div class="glass-card border border-slate-700 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col relative z-10 overflow-hidden shadow-2xl scale-95 opacity-0 transition-all duration-300" id="schedule-modal-content">
+
+            <!-- Modal Header -->
+            <div class="bg-slate-800/80 px-6 py-4 border-b border-slate-700/50 flex justify-between items-center shrink-0">
+                <h3 id="schedule-modal-title" class="text-xl font-bold text-white flex items-center gap-2">
+                    <i data-lucide="calendar-plus" class="w-5 h-5 text-indigo-400"></i> <span id="schedule-modal-title-text">Novo Cronograma</span>
+                </h3>
+                <button onclick="app.hideModal('schedule-modal')" class="text-slate-400 hover:text-white bg-slate-700 hover:bg-slate-600 rounded-full p-2 transition">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <!-- Modal Body (Scrollable) -->
+            <div class="p-6 overflow-y-auto flex-1 custom-scrollbar bg-slate-900/40">
+                <form id="schedule-form" class="space-y-6" onsubmit="app.saveSchedule(event)">
+                    <input type="hidden" id="sched_id">
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-800/50 p-5 rounded-2xl border border-slate-700/50 shadow-inner">
+                        <div class="md:col-span-2">
+                            <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">Título do Culto / Reunião</label>
+                            <input type="text" id="sched_title" required placeholder="Ex: Culto da Vitória - Quarta-feira" class="w-full bg-slate-900/80 border border-slate-700 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition font-medium">
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">Horário de Início (HH:MM)</label>
+                            <input type="time" id="sched_time" required class="w-full bg-slate-900/80 border border-slate-700 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-indigo-500 outline-none transition uppercase [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert">
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">Recorrência / Frequência</label>
+                            <div class="relative">
+                                <select id="sched_recurrence" onchange="app.toggleDayOfWeek()" class="w-full bg-slate-900/80 border border-slate-700 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-indigo-500 outline-none transition appearance-none">
+                                    <option value="WEEKLY">Semanal</option>
+                                    <option value="DAILY">Diário</option>
+                                    <option value="ONCE">Apenas uma vez (Manual)</option>
+                                </select>
+                                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-400">
+                                    <i data-lucide="chevron-down" class="w-4 h-4"></i>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="sched_day_of_week_container">
+                            <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">Dia da Semana</label>
+                            <div class="relative">
+                                <select id="sched_day_of_week" class="w-full bg-slate-900/80 border border-slate-700 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-indigo-500 outline-none transition appearance-none">
+                                    <option value="0">Domingo</option>
+                                    <option value="1">Segunda-feira</option>
+                                    <option value="2">Terça-feira</option>
+                                    <option value="3">Quarta-feira</option>
+                                    <option value="4">Quinta-feira</option>
+                                    <option value="5">Sexta-feira</option>
+                                    <option value="6">Sábado</option>
+                                </select>
+                                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-400">
+                                    <i data-lucide="chevron-down" class="w-4 h-4"></i>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="sched_date_container" class="hidden">
+                            <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">Data Exata da Ocorrência</label>
+                            <input type="date" id="sched_date" class="w-full bg-slate-900/80 border border-slate-700 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-indigo-500 outline-none transition [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert">
+                        </div>
+                    </div>
+
+                    <div class="mt-8 border-t border-slate-700/50 pt-8">
+                        <div class="flex items-center justify-between mb-4">
+                            <div>
+                                <h4 class="text-lg font-bold text-white flex items-center gap-2"><i data-lucide="list-ordered" class="w-5 h-5 text-emerald-400"></i> Momentos / Itens do Culto</h4>
+                                <p class="text-xs text-slate-400 mt-1">Defina quais atividades acontecerão, ordene-as e atribua responsáveis. Se marcadas como imutáveis, o conteúdo fica fixo.</p>
+                            </div>
+                            <button type="button" onclick="app.addScheduleItem()" class="bg-slate-700 hover:bg-slate-600 text-emerald-400 font-semibold px-4 py-2 rounded-xl text-sm transition flex items-center gap-2 border border-slate-600">
+                                <i data-lucide="plus-circle" class="w-4 h-4"></i> Adicionar Momento
+                            </button>
+                        </div>
+
+                        <div class="bg-slate-800/30 border border-slate-700/50 rounded-2xl overflow-hidden shadow-inner">
+                            <div class="hidden lg:grid grid-cols-12 gap-4 px-4 py-3 bg-slate-800/80 text-xs font-bold text-slate-300 uppercase tracking-wider border-b border-slate-700">
+                                <div class="col-span-1">Hora</div>
+                                <div class="col-span-3">Nome / Momento</div>
+                                <div class="col-span-2">Responsável</div>
+                                <div class="col-span-2">Telefone Respon.</div>
+                                <div class="col-span-3 text-center">Fixo/Imutável & Conteúdo</div>
+                                <div class="col-span-1 text-center">Ações</div>
+                            </div>
+
+                            <div id="schedule-items-container" class="divide-y divide-slate-700/30">
+                                <!-- Items injected by JS -->
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="bg-slate-800/80 px-6 py-4 border-t border-slate-700/50 flex justify-end gap-3 shrink-0">
+                <button type="button" onclick="app.hideModal('schedule-modal')" class="px-5 py-2.5 rounded-xl font-medium text-slate-300 hover:text-white hover:bg-slate-700 transition">
+                    Cancelar
+                </button>
+                <button type="submit" form="schedule-form" class="bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-2.5 rounded-xl font-bold shadow-lg shadow-indigo-500/30 transition flex items-center gap-2 active:scale-95">
+                    <i data-lucide="check" class="w-4 h-4"></i> Salvar Cronograma
+                </button>
+            </div>
+
+        </div>
+    </div>
+
+    <script src="/js/app.js"></script>
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+</html>

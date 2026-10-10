@@ -1,0 +1,206 @@
+import { Router } from 'express';
+import {
+  getAllSchedules,
+  getScheduleById,
+  createSchedule,
+  updateSchedule,
+  deleteSchedule,
+  updateScheduleItemContent
+} from '../services/scheduleManager.js';
+import { getSetting, setSetting, db } from '../config/database.js';
+import { formatScheduleForWhatsApp, formatReminderMessage } from '../utils/formatter.js';
+import { sendWhatsAppMessage } from '../services/baileys.js';
+
+const router = Router();
+
+// --- CRONOGRAMAS ---
+
+// Listar todos os cronogramas
+router.get('/schedules', (req, res) => {
+  try {
+    const schedules = getAllSchedules();
+    res.json({ success: true, schedules });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Obter cronograma por ID
+router.get('/schedules/:id', (req, res) => {
+  try {
+    const schedule = getScheduleById(req.params.id);
+    if (!schedule) {
+      return res.status(404).json({ success: false, error: 'Cronograma não encontrado' });
+    }
+    res.json({ success: true, schedule });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Criar cronograma
+router.post('/schedules', (req, res) => {
+  try {
+    const created = createSchedule(req.body);
+    res.status(201).json({ success: true, schedule: created });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Atualizar cronograma
+router.put('/schedules/:id', (req, res) => {
+  try {
+    const updated = updateSchedule(req.params.id, req.body);
+    if (!updated) {
+      return res.status(404).json({ success: false, error: 'Cronograma não encontrado' });
+    }
+    res.json({ success: true, schedule: updated });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Excluir cronograma
+router.delete('/schedules/:id', (req, res) => {
+  try {
+    const deleted = deleteSchedule(req.params.id);
+    if (!deleted) {
+      return res.status(404).json({ success: false, error: 'Cronograma não encontrado' });
+    }
+    res.json({ success: true, message: 'Cronograma excluído com sucesso' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Atualizar conteúdo de um item avulso
+router.patch('/items/:id', (req, res) => {
+  try {
+    const { content } = req.body;
+    const ok = updateScheduleItemContent(req.params.id, content || '');
+    if (!ok) {
+      return res.status(404).json({ success: false, error: 'Item não encontrado' });
+    }
+    res.json({ success: true, message: 'Item atualizado com sucesso' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Disparo manual do cronograma para o Sonoplasta (para testes ou envio antecipado)
+router.post('/schedules/:id/send-now', async (req, res) => {
+  try {
+    const schedule = getScheduleById(req.params.id);
+    if (!schedule) {
+      return res.status(404).json({ success: false, error: 'Cronograma não encontrado' });
+    }
+
+    const sonoplastaPhone = getSetting('sonoplasta_phone');
+    if (!sonoplastaPhone) {
+      return res.status(400).json({ success: false, error: 'Número do Sonoplasta não configurado nas configurações.' });
+    }
+
+    const formattedMessage = formatScheduleForWhatsApp(schedule, schedule.items);
+    const sent = await sendWhatsAppMessage(sonoplastaPhone, formattedMessage);
+
+    if (sent) {
+      db.prepare('UPDATE schedules SET sonoplasta_alert_sent = 1 WHERE id = ?').run(schedule.id);
+      res.json({ success: true, message: `Cronograma enviado para o Sonoplasta (${sonoplastaPhone})!` });
+    } else {
+      res.status(500).json({ success: false, error: 'Falha ao enviar mensagem. Verifique se o WhatsApp está conectado.' });
+    }
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Disparo manual dos lembretes para os responsáveis deste cronograma
+router.post('/schedules/:id/remind-now', async (req, res) => {
+  try {
+    const schedule = getScheduleById(req.params.id);
+    if (!schedule) {
+      return res.status(404).json({ success: false, error: 'Cronograma não encontrado' });
+    }
+
+    const itemsByPhone = new Map();
+    for (const item of schedule.items) {
+      if (item.is_immutable || !item.responsible_phone) continue;
+
+      if (!itemsByPhone.has(item.responsible_phone)) {
+        itemsByPhone.set(item.responsible_phone, {
+          name: item.responsible_name || 'Irmão(ã)',
+          items: []
+        });
+      }
+      itemsByPhone.get(item.responsible_phone).items.push(item);
+    }
+
+    if (itemsByPhone.size === 0) {
+      return res.json({ success: true, message: 'Nenhum responsável com itens mutáveis para lembrar.' });
+    }
+
+    let sentCount = 0;
+    for (const [phone, data] of itemsByPhone.entries()) {
+      const message = formatReminderMessage(data.name, schedule, data.items);
+      const sent = await sendWhatsAppMessage(phone, message);
+      if (sent) sentCount++;
+    }
+
+    db.prepare('UPDATE schedules SET reminder_sent = 1 WHERE id = ?').run(schedule.id);
+    res.json({ success: true, message: `Lembretes enviados para ${sentCount} responsável(is).` });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// --- CONFIGURAÇÕES ---
+
+router.get('/settings', (req, res) => {
+  try {
+    res.json({
+      success: true,
+      settings: {
+        sonoplasta_phone: getSetting('sonoplasta_phone', ''),
+        gemini_api_key: getSetting('gemini_api_key', '') ? '••••••••' + getSetting('gemini_api_key').slice(-4) : '',
+        has_gemini_key: Boolean(getSetting('gemini_api_key', '')),
+        bot_name: getSetting('bot_name', 'WhatsBot Sonoplasta')
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/settings', (req, res) => {
+  try {
+    const { sonoplasta_phone, gemini_api_key, bot_name } = req.body;
+
+    if (sonoplasta_phone !== undefined) {
+      setSetting('sonoplasta_phone', sonoplasta_phone);
+    }
+    if (gemini_api_key && !gemini_api_key.startsWith('••••')) {
+      setSetting('gemini_api_key', gemini_api_key);
+    }
+    if (bot_name !== undefined) {
+      setSetting('bot_name', bot_name);
+    }
+
+    res.json({ success: true, message: 'Configurações salvas com sucesso' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// --- LOGS ---
+
+router.get('/logs', (req, res) => {
+  try {
+    const logs = db.prepare('SELECT * FROM bot_logs ORDER BY id DESC LIMIT 100').all();
+    res.json({ success: true, logs });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+export default router;
