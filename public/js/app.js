@@ -2,18 +2,186 @@ const app = {
   schedules: [],
   currentScheduleId: null,
   whatsappStatus: null,
+  ngrokStatus: null,
   pollInterval: null,
+  ngrokPollInterval: null,
+  currentTimezone: 'America/Sao_Paulo',
+  serverTimeOffset: 0,
+  clockInterval: null,
 
-  init() {
+  async apiFetch(url, options = {}) {
+    options.headers = options.headers || {};
+    const token = localStorage.getItem('whatsbot_auth_token');
+    if (token) {
+      if (options.headers instanceof Headers) {
+        options.headers.set('Authorization', `Bearer ${token}`);
+      } else {
+        options.headers['Authorization'] = `Bearer ${token}`;
+      }
+    }
+
+    const res = await fetch(url, options);
+
+    if (res.status === 401 && !url.includes('/api/auth/login')) {
+      this.handleUnauthorized();
+      throw new Error('Sessão encerrada ou não autorizada. Faça login novamente.');
+    }
+
+    return res;
+  },
+
+  async checkAuth() {
+    const token = localStorage.getItem('whatsbot_auth_token');
+    const loginScreen = document.getElementById('login-screen');
+    const appScreen = document.getElementById('app-screen');
+
+    if (!token) {
+      if (loginScreen) loginScreen.classList.remove('hidden');
+      if (appScreen) appScreen.classList.add('hidden');
+      return false;
+    }
+
+    try {
+      const res = await fetch('/api/auth/check', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+
+      if (data.success && data.authenticated) {
+        if (loginScreen) loginScreen.classList.add('hidden');
+        if (appScreen) appScreen.classList.remove('hidden');
+        return true;
+      }
+    } catch (err) {
+      console.warn('Erro ao verificar autenticação:', err);
+    }
+
+    localStorage.removeItem('whatsbot_auth_token');
+    if (loginScreen) loginScreen.classList.remove('hidden');
+    if (appScreen) appScreen.classList.add('hidden');
+    return false;
+  },
+
+  async handleLogin(event) {
+    event.preventDefault();
+    const usernameInput = document.getElementById('login_username');
+    const passwordInput = document.getElementById('login_password');
+    const alertBox = document.getElementById('login-alert');
+    const alertMsg = document.getElementById('login-alert-msg');
+    const submitBtn = document.getElementById('btn-login-submit');
+
+    const username = usernameInput.value.trim();
+    const password = passwordInput.value;
+
+    if (!username || !password) return;
+
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>Entrando...</span>';
+    if (window.lucide) lucide.createIcons();
+
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+
+      if (data.success && data.token) {
+        localStorage.setItem('whatsbot_auth_token', data.token);
+        if (alertBox) alertBox.classList.add('hidden');
+        passwordInput.value = '';
+
+        document.getElementById('login-screen')?.classList.add('hidden');
+        document.getElementById('app-screen')?.classList.remove('hidden');
+
+        this.initDashboard();
+      } else {
+        if (alertBox && alertMsg) {
+          alertMsg.textContent = data.error || 'Usuário ou senha incorretos.';
+          alertBox.classList.remove('hidden');
+        }
+      }
+    } catch (err) {
+      if (alertBox && alertMsg) {
+        alertMsg.textContent = `Erro de conexão: ${err.message}`;
+        alertBox.classList.remove('hidden');
+      }
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<i data-lucide="log-in" class="w-4 h-4"></i><span>Entrar no Sistema</span>';
+      if (window.lucide) lucide.createIcons();
+    }
+  },
+
+  async logout() {
+    try {
+      await this.apiFetch('/api/auth/logout', { method: 'POST' });
+    } catch {}
+
+    localStorage.removeItem('whatsbot_auth_token');
+
+    if (this.pollInterval) clearInterval(this.pollInterval);
+    if (this.clockInterval) clearInterval(this.clockInterval);
+    if (this.ngrokPollInterval) clearInterval(this.ngrokPollInterval);
+
+    document.getElementById('app-screen')?.classList.add('hidden');
+    document.getElementById('login-screen')?.classList.remove('hidden');
+    const pwdInput = document.getElementById('login_password');
+    if (pwdInput) pwdInput.value = '';
+    const alertBox = document.getElementById('login-alert');
+    if (alertBox) alertBox.classList.add('hidden');
+  },
+
+  handleUnauthorized() {
+    localStorage.removeItem('whatsbot_auth_token');
+    if (this.pollInterval) clearInterval(this.pollInterval);
+    if (this.clockInterval) clearInterval(this.clockInterval);
+    if (this.ngrokPollInterval) clearInterval(this.ngrokPollInterval);
+
+    document.getElementById('app-screen')?.classList.add('hidden');
+    document.getElementById('login-screen')?.classList.remove('hidden');
+    const alertBox = document.getElementById('login-alert');
+    const alertMsg = document.getElementById('login-alert-msg');
+    if (alertBox && alertMsg) {
+      alertMsg.textContent = 'Sessão encerrada. Faça login novamente.';
+      alertBox.classList.remove('hidden');
+    }
+  },
+
+  async init() {
+    const isAuthed = await this.checkAuth();
+    if (isAuthed) {
+      this.initDashboard();
+    }
+    if (window.lucide) {
+      lucide.createIcons();
+    }
+  },
+
+  initDashboard() {
+    this.startClock();
     this.loadWhatsAppStatus();
+    this.loadNgrokStatus();
     this.loadSettings();
     this.loadSchedules();
     this.loadLogs();
 
+    if (window.lucide) {
+      lucide.createIcons();
+    }
+
     // Polling contínuo para status do WhatsApp
+    if (this.pollInterval) clearInterval(this.pollInterval);
     this.pollInterval = setInterval(() => {
       this.loadWhatsAppStatus(false);
     }, 3000);
+
+    // Polling de status do Ngrok a cada 10 segundos
+    if (this.ngrokPollInterval) clearInterval(this.ngrokPollInterval);
+    this.ngrokPollInterval = setInterval(() => {
+      this.loadNgrokStatus(false);
+    }, 10000);
   },
 
   showAlert(message, type = 'success') {
@@ -61,11 +229,106 @@ const app = {
     }, 300);
   },
 
+  // --- RELÓGIO OFICIAL DO BOT ---
+
+  async syncServerTime() {
+    try {
+      const res = await this.apiFetch('/api/time');
+      const data = await res.json();
+      if (data.success) {
+        this.currentTimezone = data.timezone || 'America/Sao_Paulo';
+        this.serverTimeOffset = data.timestamp - Date.now();
+        this.updateClockDisplay();
+      }
+    } catch (err) {
+      console.error('Erro ao sincronizar relógio com o servidor:', err);
+    }
+  },
+
+  startClock() {
+    this.syncServerTime();
+
+    if (this.clockInterval) clearInterval(this.clockInterval);
+    this.clockInterval = setInterval(() => {
+      this.updateClockDisplay();
+    }, 1000);
+
+    // Ressincroniza a cada 30 segundos com o servidor para garantir precisão
+    setInterval(() => {
+      this.syncServerTime();
+    }, 30000);
+  },
+
+  formatTimezoneLabel(tz) {
+    const labels = {
+      'America/Sao_Paulo': 'Brasília (UTC-3)',
+      'America/Manaus': 'Manaus (UTC-4)',
+      'America/Cuiaba': 'Cuiabá (UTC-4)',
+      'America/Porto_Velho': 'Porto Velho (UTC-4)',
+      'America/Boa_Vista': 'Boa Vista (UTC-4)',
+      'America/Belem': 'Belém (UTC-3)',
+      'America/Fortaleza': 'Fortaleza (UTC-3)',
+      'America/Recife': 'Recife (UTC-3)',
+      'America/Rio_Branco': 'Rio Branco (UTC-5)',
+      'America/Noronha': 'Noronha (UTC-2)',
+      'UTC': 'UTC',
+      'Europe/Lisbon': 'Lisboa (UTC+0/+1)',
+      'America/New_York': 'Nova York (UTC-5/-4)'
+    };
+    return labels[tz] || tz.replace('_', ' ').split('/').pop();
+  },
+
+  updateClockDisplay() {
+    const nowServer = new Date(Date.now() + this.serverTimeOffset);
+    const tz = this.currentTimezone || 'America/Sao_Paulo';
+
+    try {
+      const timeFmt = new Intl.DateTimeFormat('pt-BR', {
+        timeZone: tz,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      });
+
+      const dateFmt = new Intl.DateTimeFormat('pt-BR', {
+        timeZone: tz,
+        weekday: 'short',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      });
+
+      const timeStr = timeFmt.format(nowServer);
+      const rawDate = dateFmt.format(nowServer);
+      const dateClean = rawDate.charAt(0).toUpperCase() + rawDate.slice(1).replace('.', '');
+      const tzLabel = this.formatTimezoneLabel(tz);
+
+      const headerTime = document.getElementById('bot-clock-time');
+      const headerDate = document.getElementById('bot-clock-date');
+      const headerTz = document.getElementById('bot-clock-tz');
+
+      const sideTime = document.getElementById('sidebar-clock-time');
+      const sideDate = document.getElementById('sidebar-clock-date');
+      const sideTz = document.getElementById('sidebar-clock-tz');
+
+      if (headerTime) headerTime.textContent = timeStr;
+      if (headerDate) headerDate.textContent = dateClean;
+      if (headerTz) headerTz.textContent = tzLabel;
+
+      if (sideTime) sideTime.textContent = timeStr;
+      if (sideDate) sideDate.textContent = dateClean;
+      if (sideTz) sideTz.textContent = tzLabel;
+    } catch (err) {
+      console.error('Erro na formatação do relógio:', err);
+    }
+  },
+
   // --- WHATSAPP STATUS ---
 
   async loadWhatsAppStatus(showFeedback = true) {
     try {
-      const res = await fetch('/api/whatsapp/status');
+      const res = await this.apiFetch('/api/whatsapp/status');
       const data = await res.json();
       this.whatsappStatus = data;
       this.renderWhatsAppStatus();
@@ -117,10 +380,114 @@ const app = {
 
   async actionWhatsApp(action) {
     try {
-      const res = await fetch(`/api/whatsapp/${action}`, { method: 'POST' });
+      const res = await this.apiFetch(`/api/whatsapp/${action}`, { method: 'POST' });
       const data = await res.json();
       this.showAlert(data.message, data.success ? 'success' : 'error');
       this.loadWhatsAppStatus();
+    } catch (err) {
+      this.showAlert(`Erro: ${err.message}`, 'error');
+    }
+  },
+
+  // --- NGROK ACESSO REMOTO ---
+
+  async loadNgrokStatus(showFeedback = true) {
+    try {
+      const res = await this.apiFetch('/api/system/ngrok');
+      const data = await res.json();
+      if (data.success) {
+        this.ngrokStatus = data;
+        this.renderNgrokStatus();
+      }
+    } catch (err) {
+      if (showFeedback) console.error('Erro ao verificar status do Ngrok:', err);
+    }
+  },
+
+  renderNgrokStatus() {
+    if (!this.ngrokStatus) return;
+
+    const dot = document.getElementById('ngrok-status-dot');
+    const text = document.getElementById('ngrok-status-text');
+    const modalStatus = document.getElementById('ngrok-modal-status-text');
+    const activeView = document.getElementById('ngrok-active-view');
+    const missingView = document.getElementById('ngrok-missing-view');
+    const errorView = document.getElementById('ngrok-error-view');
+    const urlInput = document.getElementById('ngrok-public-url-input');
+    const openLink = document.getElementById('ngrok-open-link');
+    const qrImg = document.getElementById('ngrok-qr-img');
+    const errorMsg = document.getElementById('ngrok-error-msg');
+
+    if (!dot || !text) return;
+
+    activeView?.classList.add('hidden');
+    missingView?.classList.add('hidden');
+    errorView?.classList.add('hidden');
+
+    const status = this.ngrokStatus.status;
+
+    if (status === 'CONNECTED' && this.ngrokStatus.url) {
+      dot.className = 'w-2 h-2 rounded-full bg-emerald-500 badge-pulse';
+      text.innerText = 'Online (Ngrok)';
+      if (modalStatus) modalStatus.innerText = 'Túnel ativo! O sistema pode ser acessado de qualquer lugar pela internet.';
+      if (activeView) activeView.classList.remove('hidden');
+      if (urlInput) urlInput.value = this.ngrokStatus.url;
+      if (openLink) openLink.href = this.ngrokStatus.url;
+      if (qrImg) qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(this.ngrokStatus.url)}`;
+    } else if (status === 'CONNECTING') {
+      dot.className = 'w-2 h-2 rounded-full bg-indigo-500 badge-pulse';
+      text.innerText = 'Conectando...';
+      if (modalStatus) modalStatus.innerText = 'Estabelecendo túnel com o servidor Ngrok...';
+    } else if (status === 'MISSING_TOKEN') {
+      dot.className = 'w-2 h-2 rounded-full bg-amber-500';
+      text.innerText = 'Ngrok: Sem Token';
+      if (modalStatus) modalStatus.innerText = 'Authtoken não informado. Configure nas preferências ao lado.';
+      if (missingView) missingView.classList.remove('hidden');
+    } else if (status === 'DISABLED') {
+      dot.className = 'w-2 h-2 rounded-full bg-slate-500';
+      text.innerText = 'Ngrok Desativado';
+      if (modalStatus) modalStatus.innerText = 'O túnel está desativado nas preferências.';
+    } else if (status === 'ERROR') {
+      dot.className = 'w-2 h-2 rounded-full bg-rose-500';
+      text.innerText = 'Ngrok: Erro';
+      if (modalStatus) modalStatus.innerText = 'Ocorreu uma falha ao iniciar o túnel Ngrok.';
+      if (errorView) errorView.classList.remove('hidden');
+      if (errorMsg) errorMsg.textContent = this.ngrokStatus.error || 'Erro desconhecido.';
+    } else {
+      dot.className = 'w-2 h-2 rounded-full bg-slate-500';
+      text.innerText = 'Ngrok';
+      if (modalStatus) modalStatus.innerText = 'Túnel desconectado.';
+    }
+  },
+
+  async copyNgrokUrl() {
+    const url = this.ngrokStatus?.url;
+    if (!url) return;
+
+    try {
+      await navigator.clipboard.writeText(url);
+      const btn = document.getElementById('btn-copy-ngrok');
+      if (btn) {
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = '<span class="text-[10px] px-1 font-bold">Copiado!</span>';
+        setTimeout(() => {
+          btn.innerHTML = originalHtml;
+          if (window.lucide) lucide.createIcons();
+        }, 2000);
+      }
+      this.showAlert('Link público do Ngrok copiado com sucesso!', 'success');
+    } catch (err) {
+      this.showAlert('Não foi possível copiar automaticamente.', 'error');
+    }
+  },
+
+  async actionNgrok(action) {
+    try {
+      this.showAlert('Reiniciando túnel Ngrok...', 'info');
+      const res = await this.apiFetch(`/api/system/ngrok/${action}`, { method: 'POST' });
+      const data = await res.json();
+      this.showAlert(data.message, data.success ? 'success' : 'error');
+      await this.loadNgrokStatus();
     } catch (err) {
       this.showAlert(`Erro: ${err.message}`, 'error');
     }
@@ -130,13 +497,39 @@ const app = {
 
   async loadSettings() {
     try {
-      const res = await fetch('/api/settings');
+      const res = await this.apiFetch('/api/settings');
       const data = await res.json();
       if (data.success && data.settings) {
         document.getElementById('setting_sonoplasta_phone').value = data.settings.sonoplasta_phone || '';
         document.getElementById('setting_bot_name').value = data.settings.bot_name || '';
+        if (data.settings.timezone && document.getElementById('setting_timezone')) {
+          document.getElementById('setting_timezone').value = data.settings.timezone;
+          const tzSelect = document.getElementById('setting_timezone');
+          if (tzSelect && !tzSelect._hasChangeListener) {
+            tzSelect._hasChangeListener = true;
+            tzSelect.addEventListener('change', (e) => {
+              this.currentTimezone = e.target.value;
+              this.updateClockDisplay();
+            });
+          }
+        }
+        if (data.settings.reminder_time && document.getElementById('setting_reminder_time')) {
+          document.getElementById('setting_reminder_time').value = data.settings.reminder_time;
+        }
         if (data.settings.has_gemini_key) {
           document.getElementById('setting_gemini_key').placeholder = 'Chave ativa (••••••••). Digite para alterar.';
+        }
+        if (document.getElementById('setting_ngrok_domain')) {
+          document.getElementById('setting_ngrok_domain').value = data.settings.ngrok_domain || '';
+        }
+        if (document.getElementById('setting_ngrok_enabled')) {
+          document.getElementById('setting_ngrok_enabled').checked = data.settings.ngrok_enabled !== false;
+        }
+        if (document.getElementById('setting_auth_username')) {
+          document.getElementById('setting_auth_username').value = data.settings.auth_username || 'admin';
+        }
+        if (data.settings.has_ngrok_token && document.getElementById('setting_ngrok_authtoken')) {
+          document.getElementById('setting_ngrok_authtoken').placeholder = 'Token ativo (••••••••). Digite para alterar.';
         }
       }
     } catch (err) {
@@ -149,17 +542,64 @@ const app = {
     const sonoplasta_phone = document.getElementById('setting_sonoplasta_phone').value.trim();
     const gemini_api_key = document.getElementById('setting_gemini_key').value.trim();
     const bot_name = document.getElementById('setting_bot_name').value.trim();
+    const timezone = document.getElementById('setting_timezone')?.value || 'America/Sao_Paulo';
+    const reminder_time = document.getElementById('setting_reminder_time')?.value || '09:00';
+
+    const ngrok_authtoken = document.getElementById('setting_ngrok_authtoken')?.value.trim() || '';
+    const ngrok_domain = document.getElementById('setting_ngrok_domain')?.value.trim() || '';
+    const ngrok_enabled = document.getElementById('setting_ngrok_enabled')?.checked;
+
+    const auth_username = document.getElementById('setting_auth_username')?.value.trim();
+    const new_password = document.getElementById('setting_new_password')?.value;
+    const current_password = document.getElementById('setting_current_password')?.value;
+
+    // Se o usuário deseja alterar login ou senha coletiva
+    if (current_password) {
+      try {
+        const credRes = await this.apiFetch('/api/auth/change-credentials', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            currentPassword: current_password,
+            newUsername: auth_username,
+            newPassword: new_password || undefined
+          })
+        });
+        const credData = await credRes.json();
+        if (!credData.success) {
+          this.showAlert(`Erro nas credenciais: ${credData.error}`, 'error');
+          return;
+        }
+        document.getElementById('setting_new_password').value = '';
+        document.getElementById('setting_current_password').value = '';
+        this.showAlert('Credenciais do sistema alteradas com sucesso!', 'success');
+      } catch (err) {
+        this.showAlert(`Erro ao alterar credenciais: ${err.message}`, 'error');
+        return;
+      }
+    }
 
     try {
-      const res = await fetch('/api/settings', {
+      const res = await this.apiFetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sonoplasta_phone, gemini_api_key, bot_name })
+        body: JSON.stringify({
+          sonoplasta_phone,
+          gemini_api_key,
+          bot_name,
+          timezone,
+          reminder_time,
+          ngrok_authtoken,
+          ngrok_domain,
+          ngrok_enabled
+        })
       });
       const data = await res.json();
       if (data.success) {
         this.showAlert('Configurações salvas com sucesso!');
         this.loadSettings();
+        this.syncServerTime();
+        this.loadNgrokStatus();
       } else {
         this.showAlert(data.error, 'error');
       }
@@ -176,7 +616,7 @@ const app = {
     const list = document.getElementById('schedules-list');
 
     try {
-      const res = await fetch('/api/schedules');
+      const res = await this.apiFetch('/api/schedules');
       const data = await res.json();
       loading.classList.add('hidden');
 
@@ -306,7 +746,7 @@ const app = {
   async sendToSonoplastaNow(scheduleId) {
     try {
       this.showAlert('Enviando cronograma para o Sonoplasta via WhatsApp...', 'info');
-      const res = await fetch(`/api/schedules/${scheduleId}/send-now`, { method: 'POST' });
+      const res = await this.apiFetch(`/api/schedules/${scheduleId}/send-now`, { method: 'POST' });
       const data = await res.json();
       if (data.success) {
         this.showAlert(data.message, 'success');
@@ -321,7 +761,7 @@ const app = {
   async remindNow(scheduleId) {
     try {
       this.showAlert('Disparando lembretes via WhatsApp...', 'info');
-      const res = await fetch(`/api/schedules/${scheduleId}/remind-now`, { method: 'POST' });
+      const res = await this.apiFetch(`/api/schedules/${scheduleId}/remind-now`, { method: 'POST' });
       const data = await res.json();
       if (data.success) {
         this.showAlert(data.message, 'success');
@@ -337,7 +777,7 @@ const app = {
     if (!confirm('Deseja realmente excluir este cronograma e todos os seus itens?')) return;
 
     try {
-      const res = await fetch(`/api/schedules/${scheduleId}`, { method: 'DELETE' });
+      const res = await this.apiFetch(`/api/schedules/${scheduleId}`, { method: 'DELETE' });
       const data = await res.json();
       if (data.success) {
         this.showAlert('Cronograma excluído com sucesso!');
@@ -517,7 +957,7 @@ const app = {
       const url = id ? `/api/schedules/${id}` : '/api/schedules';
       const method = id ? 'PUT' : 'POST';
 
-      const res = await fetch(url, {
+      const res = await this.apiFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -541,7 +981,7 @@ const app = {
   async loadLogs() {
     const container = document.getElementById('logs-container');
     try {
-      const res = await fetch('/api/logs');
+      const res = await this.apiFetch('/api/logs');
       const data = await res.json();
       if (data.success && data.logs) {
         if (data.logs.length === 0) {

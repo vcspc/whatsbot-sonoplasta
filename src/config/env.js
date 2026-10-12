@@ -12,6 +12,13 @@ export const config = {
   geminiApiKey: process.env.GEMINI_API_KEY || '',
   sonoplastaPhone: process.env.SONOPLASTA_PHONE || '',
   botName: process.env.BOT_NAME || 'WhatsBot Sonoplasta',
+  timezone: process.env.TIMEZONE || 'America/Sao_Paulo',
+  reminderTime: process.env.REMINDER_TIME || '09:00',
+  ngrokAuthToken: process.env.NGROK_AUTHTOKEN || '',
+  ngrokDomain: process.env.NGROK_DOMAIN || '',
+  ngrokEnabled: process.env.NGROK_ENABLED !== 'false',
+  adminUser: process.env.ADMIN_USER || 'admin',
+  adminPassword: process.env.ADMIN_PASSWORD || 'admin123',
   dataDir: path.resolve(__dirname, '../../data'),
   authDir: path.resolve(__dirname, '../../baileys_auth_info')
 };

@@ -33,6 +33,21 @@ export function extractYouTubeUrls(text) {
  * Acessa um link do YouTube usando o Playwright e extrai o título do vídeo.
  */
 export async function getYouTubeVideoTitle(url) {
+  // 1. Tenta primeiro via API oficial oEmbed do YouTube (mais rápido e imune a interstitials)
+  try {
+    const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
+    const res = await fetch(oembedUrl, { signal: AbortSignal.timeout(4000) });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.title && data.title.trim()) {
+        logMessage('INFO', `[Playwright] Título extraído com sucesso: "${data.title.trim()}"`);
+        return data.title.trim();
+      }
+    }
+  } catch {
+    // Segue para fallback com Playwright
+  }
+
   let context = null;
   let page = null;
   try {
@@ -54,18 +69,20 @@ export async function getYouTubeVideoTitle(url) {
     // 2. Meta tag title
     // 3. document.title
     const title = await page.evaluate(() => {
+      const isValid = t => t && t.trim() && !t.startsWith('http://') && !t.startsWith('https://');
+
       // 1. og:title
       const ogTitle = document.querySelector('meta[property="og:title"]')?.getAttribute('content');
-      if (ogTitle && ogTitle.trim()) return ogTitle.trim();
+      if (isValid(ogTitle)) return ogTitle.trim();
 
       // 2. meta name="title"
       const metaTitle = document.querySelector('meta[name="title"]')?.getAttribute('content');
-      if (metaTitle && metaTitle.trim()) return metaTitle.trim();
+      if (isValid(metaTitle)) return metaTitle.trim();
 
       // 3. document.title
       if (document.title && document.title.trim()) {
         const cleaned = document.title.replace(/\s*-\s*YouTube$/i, '').trim();
-        if (cleaned) return cleaned;
+        if (isValid(cleaned)) return cleaned;
       }
 
       return null;

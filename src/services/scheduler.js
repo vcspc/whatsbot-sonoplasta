@@ -3,6 +3,13 @@ import { db, logMessage, getSetting } from '../config/database.js';
 import { getAllSchedules, renewCompletedSchedules } from './scheduleManager.js';
 import { formatScheduleForWhatsApp, formatReminderMessage } from '../utils/formatter.js';
 import { sendWhatsAppMessage } from './baileys.js';
+import {
+  getZonedParts,
+  addDaysToDateString,
+  getMinuteDifference,
+  getSafeTimezone,
+  getSafeReminderTime
+} from '../utils/timezone.js';
 
 let cronJob = null;
 
@@ -33,23 +40,30 @@ export function initScheduler() {
 
 /**
  * 1. Lembretes da Véspera:
- * Envia mensagem no dia anterior para todos os responsáveis por itens mutáveis pendentes.
+ * Envia mensagem no dia anterior para todos os responsáveis por itens mutáveis pendentes
+ * assim que o horário configurado (default: 09:00) for atingido no fuso do Sonoplasta.
  */
 export async function checkEveReminders() {
-  const now = new Date();
-  const pad = n => String(n).padStart(2, '0');
+  const tz = getSafeTimezone(getSetting('timezone', 'America/Sao_Paulo'));
+  const reminderTime = getSafeReminderTime(getSetting('reminder_time', '09:00'));
 
-  // Calcula a data de amanhã (YYYY-MM-DD)
-  const tomorrow = new Date(now);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomorrowStr = `${tomorrow.getFullYear()}-${pad(tomorrow.getMonth() + 1)}-${pad(tomorrow.getDate())}`;
+  const now = new Date();
+  const { dateStr: todayStr, timeStr: currentTimeStr } = getZonedParts(now, tz);
+
+  // Se ainda não atingiu o horário configurado para envio de lembretes na véspera (ex: 09:00), aguarda
+  if (currentTimeStr < reminderTime) {
+    return;
+  }
+
+  // Calcula a data de amanhã (YYYY-MM-DD) no fuso local
+  const tomorrowStr = addDaysToDateString(todayStr, 1);
 
   const schedules = getAllSchedules();
 
   for (const schedule of schedules) {
     // Se o culto for amanhã e o lembrete ainda não tiver sido enviado
     if (schedule.next_run_date === tomorrowStr && !schedule.reminder_sent) {
-      logMessage('INFO', `[Scheduler] Disparando lembretes da véspera para o cronograma: "${schedule.title}" (${schedule.next_run_date})`);
+      logMessage('INFO', `[Scheduler] Disparando lembretes da véspera (horário configurado: ${reminderTime}, fuso: ${tz}) para o cronograma: "${schedule.title}" (${schedule.next_run_date})`);
 
       // Agrupa os itens pendentes mutáveis por telefone do responsável
       const itemsByPhone = new Map();
@@ -83,7 +97,8 @@ export async function checkEveReminders() {
 
 /**
  * 2. Alerta para o Sonoplasta (1 hora antes do início do culto):
- * Envia o cronograma completo com formatação própria do WhatsApp para o Sonoplasta.
+ * Envia o cronograma completo com formatação própria do WhatsApp para o Sonoplasta,
+ * calculado no fuso horário configurado.
  */
 export async function checkOneHourSonoplastaAlert() {
   const sonoplastaPhone = getSetting('sonoplasta_phone');
@@ -91,20 +106,16 @@ export async function checkOneHourSonoplastaAlert() {
     return; // Sonoplasta ainda não cadastrou o número
   }
 
+  const tz = getSafeTimezone(getSetting('timezone', 'America/Sao_Paulo'));
   const now = new Date();
-  const pad = n => String(n).padStart(2, '0');
-  const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  const { dateStr: todayStr } = getZonedParts(now, tz);
 
   const schedules = getAllSchedules();
 
   for (const schedule of schedules) {
     if (schedule.next_run_date === todayStr && !schedule.sonoplasta_alert_sent) {
-      const [h, m] = schedule.event_time.split(':').map(Number);
-      const eventDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0);
-
-      // Diferença em minutos entre o horário do culto e agora
-      const diffMs = eventDate.getTime() - now.getTime();
-      const diffMinutes = Math.floor(diffMs / (1000 * 60));
+      // Diferença em minutos entre o início do culto no fuso local e o instante atual
+      const diffMinutes = getMinuteDifference(schedule.next_run_date, schedule.event_time, now, tz);
 
       // Se faltar entre 0 e 65 minutos para o início do culto
       if (diffMinutes <= 65 && diffMinutes >= 0) {

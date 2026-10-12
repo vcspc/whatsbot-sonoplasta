@@ -21,28 +21,110 @@
         }
     </script>
 </head>
-<body class="min-h-screen relative pb-20 lg:pb-0">
+<body class="min-h-screen relative pb-20 lg:pb-0 bg-slate-950">
 
-    <!-- Header -->
-    <header class="glass-card sticky top-0 z-50 border-b border-slate-700/50">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-            <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-white shadow-lg">
-                    <i data-lucide="music" class="w-5 h-5"></i>
+    <!-- Login Screen (Visível quando não autenticado) -->
+    <div id="login-screen" class="min-h-screen flex items-center justify-center p-4 bg-slate-950">
+        <div class="glass-card border border-slate-700/80 rounded-3xl w-full max-w-md p-8 shadow-2xl relative overflow-hidden">
+            <!-- Glow decorativo de fundo -->
+            <div class="absolute -top-10 -right-10 w-40 h-40 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
+            <div class="absolute -bottom-10 -left-10 w-40 h-40 bg-purple-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+            <div class="text-center mb-8 relative">
+                <div class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-white shadow-xl mx-auto mb-4 border border-indigo-400/20">
+                    <i data-lucide="music" class="w-8 h-8"></i>
                 </div>
-                <div>
-                    <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-purple-300">WhatsBot Sonoplasta</h1>
-                    <p class="text-xs text-slate-400 font-medium">Gestão de Cronogramas e Automação de Cultos</p>
-                </div>
+                <h2 class="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-purple-300">WhatsBot Sonoplasta</h2>
+                <p class="text-xs text-slate-400 mt-1 font-medium">Acesso Restrito ao Painel de Cultos</p>
             </div>
 
-            <!-- WhatsApp Status Badge -->
-            <div id="wa-status-badge" class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800 text-sm font-medium border border-slate-700 cursor-pointer hover:bg-slate-700 transition" onclick="app.showModal('whatsapp-modal')">
-                <div class="w-2 h-2 rounded-full bg-slate-500 badge-pulse" id="wa-status-dot"></div>
-                <span id="wa-status-text">Verificando...</span>
+            <!-- Login Alert -->
+            <div id="login-alert" class="hidden mb-6 p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-center gap-2">
+                <i data-lucide="alert-circle" class="w-4 h-4 shrink-0"></i>
+                <span id="login-alert-msg">Usuário ou senha incorretos.</span>
+            </div>
+
+            <form id="login-form" onsubmit="app.handleLogin(event)" class="space-y-5">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">Usuário de Acesso</label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                            <i data-lucide="user" class="w-4 h-4"></i>
+                        </div>
+                        <input type="text" id="login_username" required autocomplete="username" placeholder="admin" class="w-full bg-slate-900/90 border border-slate-700 rounded-xl pl-10 pr-4 py-3 text-white focus:ring-2 focus:ring-indigo-500 outline-none transition text-sm">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">Senha do Sistema</label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                            <i data-lucide="lock" class="w-4 h-4"></i>
+                        </div>
+                        <input type="password" id="login_password" required autocomplete="current-password" placeholder="••••••••" class="w-full bg-slate-900/90 border border-slate-700 rounded-xl pl-10 pr-4 py-3 text-white focus:ring-2 focus:ring-indigo-500 outline-none transition text-sm">
+                    </div>
+                </div>
+
+                <button type="submit" id="btn-login-submit" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-indigo-500/25 transition active:scale-95 flex items-center justify-center gap-2 text-sm mt-2">
+                    <i data-lucide="log-in" class="w-4 h-4"></i>
+                    <span>Entrar no Sistema</span>
+                </button>
+            </form>
+
+            <div class="mt-6 text-center text-[11px] text-slate-500">
+                Acesso compartilhado para equipe e operadores de som.
             </div>
         </div>
-    </header>
+    </div>
+
+    <!-- App Screen (Visível somente após autenticação) -->
+    <div id="app-screen" class="hidden">
+
+        <!-- Header -->
+        <header class="glass-card sticky top-0 z-50 border-b border-slate-700/50">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-white shadow-lg">
+                        <i data-lucide="music" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-purple-300">WhatsBot Sonoplasta</h1>
+                        <p class="text-xs text-slate-400 font-medium">Gestão de Cronogramas e Automação de Cultos</p>
+                    </div>
+                </div>
+
+                <!-- Controles do Topo: Relógio Oficial, Ngrok, WhatsApp & Logout -->
+                <div class="flex items-center gap-2 sm:gap-3">
+                    <!-- Relógio Oficial do Bot -->
+                    <div id="bot-clock-badge" class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800/90 text-xs border border-slate-700/80 shadow-sm" title="Horário oficial que o bot utiliza para lembretes e alertas">
+                        <i data-lucide="clock" class="w-4 h-4 text-indigo-400"></i>
+                        <div class="flex items-baseline gap-1.5">
+                            <span id="bot-clock-time" class="font-mono font-bold text-white text-sm tracking-wider">--:--:--</span>
+                            <span id="bot-clock-date" class="text-slate-400 text-[11px] hidden md:inline">--/--/----</span>
+                        </div>
+                        <span id="bot-clock-tz" class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 hidden sm:inline">...</span>
+                    </div>
+
+                    <!-- Ngrok Status Badge -->
+                    <div id="ngrok-status-badge" class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800 text-xs sm:text-sm font-medium border border-slate-700 cursor-pointer hover:bg-slate-700 transition" onclick="app.showModal('ngrok-modal')" title="Acesso Remoto via Internet com Ngrok">
+                        <div class="w-2 h-2 rounded-full bg-slate-500" id="ngrok-status-dot"></div>
+                        <span id="ngrok-status-text">Ngrok</span>
+                    </div>
+
+                    <!-- WhatsApp Status Badge -->
+                    <div id="wa-status-badge" class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800 text-xs sm:text-sm font-medium border border-slate-700 cursor-pointer hover:bg-slate-700 transition" onclick="app.showModal('whatsapp-modal')">
+                        <div class="w-2 h-2 rounded-full bg-slate-500 badge-pulse" id="wa-status-dot"></div>
+                        <span id="wa-status-text">Verificando...</span>
+                    </div>
+
+                    <!-- Botão Logout -->
+                    <button onclick="app.logout()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-800 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 text-xs font-semibold border border-slate-700 hover:border-rose-500/30 transition shadow-sm" title="Sair do sistema">
+                        <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
+                        <span class="hidden md:inline">Sair</span>
+                    </button>
+                </div>
+            </div>
+        </header>
 
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
 
@@ -95,6 +177,23 @@
                         <h3 class="font-bold text-lg text-white">Configurações Gerais</h3>
                     </div>
 
+                    <!-- Card Informativo do Relógio Oficial -->
+                    <div class="bg-slate-900/60 rounded-xl p-3.5 border border-slate-800/80 flex items-center justify-between mb-4">
+                        <div class="flex items-center gap-3">
+                            <div class="w-9 h-9 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-400 border border-indigo-500/20">
+                                <i data-lucide="clock" class="w-4 h-4"></i>
+                            </div>
+                            <div>
+                                <div class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Horário Oficial do Bot</div>
+                                <div class="flex items-baseline gap-2">
+                                    <span id="sidebar-clock-time" class="font-mono font-bold text-base text-white tracking-wider">--:--:--</span>
+                                    <span id="sidebar-clock-date" class="text-xs text-slate-400">--/--/----</span>
+                                </div>
+                            </div>
+                        </div>
+                        <span id="sidebar-clock-tz" class="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-medium max-w-[120px] truncate" title="Fuso horário ativo">...</span>
+                    </div>
+
                     <form id="settings-form" class="space-y-4" onsubmit="app.saveSettings(event)">
                         <div>
                             <label class="block text-xs font-medium text-slate-400 mb-1">Telefone do Sonoplasta</label>
@@ -113,7 +212,88 @@
                             <input type="text" id="setting_bot_name" placeholder="WhatsBot Sonoplasta" class="w-full bg-slate-800 border-none rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 outline-none text-sm placeholder-slate-500">
                         </div>
 
-                        <button type="submit" class="w-full bg-slate-700 hover:bg-slate-600 focus:bg-slate-600 text-white py-2 rounded-lg text-sm font-semibold transition active:scale-95 flex items-center justify-center gap-2">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Fuso Horário (Timezone)</label>
+                            <select id="setting_timezone" class="w-full bg-slate-800 border-none rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 outline-none text-sm">
+                                <optgroup label="Brasil">
+                                    <option value="America/Sao_Paulo">Brasília / São Paulo / Rio / Sul / Sudeste / Nordeste (UTC-3)</option>
+                                    <option value="America/Manaus">Amazonas (Manaus - UTC-4)</option>
+                                    <option value="America/Cuiaba">Mato Grosso / Cuiabá (UTC-4)</option>
+                                    <option value="America/Porto_Velho">Rondônia (Porto Velho - UTC-4)</option>
+                                    <option value="America/Boa_Vista">Roraima (Boa Vista - UTC-4)</option>
+                                    <option value="America/Belem">Pará / Belém (UTC-3)</option>
+                                    <option value="America/Fortaleza">Ceará / Fortaleza (UTC-3)</option>
+                                    <option value="America/Recife">Pernambuco / Recife (UTC-3)</option>
+                                    <option value="America/Rio_Branco">Acre / Rio Branco (UTC-5)</option>
+                                    <option value="America/Noronha">Fernando de Noronha (UTC-2)</option>
+                                </optgroup>
+                                <optgroup label="Internacional">
+                                    <option value="UTC">UTC (Tempo Universal Coordenado)</option>
+                                    <option value="Europe/Lisbon">Lisboa / Portugal (UTC+0 / UTC+1)</option>
+                                    <option value="America/New_York">Nova York / EUA (UTC-5 / UTC-4)</option>
+                                </optgroup>
+                            </select>
+                            <span class="text-[10px] text-slate-500 block mt-1">Garante que lembretes e alertas ocorram no horário local correto, mesmo com o servidor hospedado no exterior.</span>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Horário do Lembrete da Véspera</label>
+                            <input type="time" id="setting_reminder_time" value="09:00" class="w-full bg-slate-800 border-none rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 outline-none text-sm">
+                            <span class="text-[10px] text-slate-500 block mt-1">Horário a partir do qual as mensagens serão enviadas no dia anterior ao culto (Padrão: 09:00).</span>
+                        </div>
+
+                        <!-- Seção Ngrok -->
+                        <div class="pt-4 border-t border-slate-700/50">
+                            <div class="flex items-center gap-2 mb-3">
+                                <i data-lucide="globe" class="w-4 h-4 text-indigo-400"></i>
+                                <h4 class="text-xs font-bold text-white uppercase tracking-wider">Acesso Remoto (Ngrok)</h4>
+                            </div>
+
+                            <div class="space-y-3">
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-400 mb-1">Ngrok Authtoken</label>
+                                    <input type="password" id="setting_ngrok_authtoken" placeholder="Token não visível. Digite para alterar." class="w-full bg-slate-800 border-none rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 outline-none text-sm placeholder-slate-500">
+                                    <span class="text-[10px] text-slate-500 block mt-1">Obtenha gratuitamente em <a href="https://dashboard.ngrok.com/get-started/your-authtoken" target="_blank" class="text-indigo-400 hover:underline">dashboard.ngrok.com</a></span>
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-400 mb-1">Domínio Estático (Opcional)</label>
+                                    <input type="text" id="setting_ngrok_domain" placeholder="Ex: meu-culto.ngrok-free.app" class="w-full bg-slate-800 border-none rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 outline-none text-sm placeholder-slate-500">
+                                </div>
+
+                                <div class="flex items-center gap-2">
+                                    <input type="checkbox" id="setting_ngrok_enabled" class="rounded bg-slate-800 text-indigo-600 focus:ring-indigo-500 border-slate-700 cursor-pointer">
+                                    <label for="setting_ngrok_enabled" class="text-xs text-slate-300 cursor-pointer">Habilitar túnel Ngrok ao iniciar</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Seção Segurança / Senha Coletiva -->
+                        <div class="pt-4 border-t border-slate-700/50">
+                            <div class="flex items-center gap-2 mb-3">
+                                <i data-lucide="shield" class="w-4 h-4 text-purple-400"></i>
+                                <h4 class="text-xs font-bold text-white uppercase tracking-wider">Credenciais de Acesso</h4>
+                            </div>
+
+                            <div class="space-y-3">
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-400 mb-1">Usuário do Sistema</label>
+                                    <input type="text" id="setting_auth_username" placeholder="admin" class="w-full bg-slate-800 border-none rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 outline-none text-sm">
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-400 mb-1">Nova Senha</label>
+                                    <input type="password" id="setting_new_password" placeholder="Preencha apenas se for alterar a senha" class="w-full bg-slate-800 border-none rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 outline-none text-sm placeholder-slate-500">
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-400 mb-1">Senha Atual <span class="text-rose-400">*</span></label>
+                                    <input type="password" id="setting_current_password" placeholder="Necessária para confirmar alteração de login/senha" class="w-full bg-slate-800 border-none rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 outline-none text-sm placeholder-slate-500">
+                                </div>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-2.5 rounded-xl text-sm font-semibold transition active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20">
                             <i data-lucide="save" class="w-4 h-4"></i> Salvar Preferências
                         </button>
                     </form>
@@ -314,6 +494,80 @@
 
         </div>
     </div>
+
+    <!-- Ngrok Management Modal -->
+    <div id="ngrok-modal" class="fixed inset-0 z-[60] hidden flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="app.hideModal('ngrok-modal')"></div>
+        <div class="glass-card border border-slate-700 rounded-3xl w-full max-w-md relative z-10 overflow-hidden shadow-2xl scale-95 opacity-0 transition-all duration-300" id="ngrok-modal-content">
+            <div class="bg-gradient-to-b from-slate-800 to-slate-900/50 p-6 text-center pt-8">
+
+                <button onclick="app.hideModal('ngrok-modal')" class="absolute top-4 right-4 text-slate-400 hover:text-white">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+
+                <div class="w-16 h-16 rounded-2xl bg-indigo-500/10 flex items-center justify-center mx-auto mb-4 border border-indigo-500/20 text-indigo-400">
+                    <i data-lucide="globe" class="w-8 h-8"></i>
+                </div>
+
+                <h3 class="text-xl font-extrabold text-white mb-1">Acesso Remoto via Ngrok</h3>
+                <p id="ngrok-modal-status-text" class="text-sm font-medium text-slate-400 mb-6">Verificando status do túnel...</p>
+
+                <!-- Visualização Quando Conectado -->
+                <div id="ngrok-active-view" class="hidden space-y-4">
+                    <div class="bg-slate-900/80 rounded-2xl p-4 border border-slate-700 text-left">
+                        <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">URL Pública do Sistema</label>
+                        <div class="flex items-center gap-2">
+                            <input type="text" id="ngrok-public-url-input" readonly class="w-full bg-slate-800 text-indigo-300 text-xs font-mono p-2.5 rounded-lg border border-slate-700/60 outline-none">
+                            <button onclick="app.copyNgrokUrl()" id="btn-copy-ngrok" class="bg-indigo-600 hover:bg-indigo-500 text-white p-2.5 rounded-lg text-xs font-semibold shrink-0 flex items-center gap-1 transition" title="Copiar link">
+                                <i data-lucide="copy" class="w-4 h-4"></i>
+                            </button>
+                            <a id="ngrok-open-link" href="#" target="_blank" class="bg-slate-700 hover:bg-slate-600 text-slate-200 p-2.5 rounded-lg text-xs shrink-0 flex items-center transition" title="Abrir link em nova aba">
+                                <i data-lucide="external-link" class="w-4 h-4"></i>
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- QR Code para Celular -->
+                    <div class="bg-white p-3 rounded-2xl shadow-xl w-48 h-48 mx-auto flex items-center justify-center">
+                        <img id="ngrok-qr-img" src="" alt="QR Code Ngrok" class="w-full h-full object-contain">
+                    </div>
+                    <p class="text-xs text-slate-400">Aponte a câmera do celular para abrir o painel de qualquer lugar.</p>
+                </div>
+
+                <!-- Visualização Quando Falta Token -->
+                <div id="ngrok-missing-view" class="hidden text-left bg-slate-900/80 p-4 rounded-2xl border border-amber-500/30 space-y-3 mb-4">
+                    <div class="flex items-center gap-2 text-amber-400 font-semibold text-xs">
+                        <i data-lucide="alert-triangle" class="w-4 h-4"></i>
+                        <span>Authtoken do Ngrok Não Configurado</span>
+                    </div>
+                    <p class="text-xs text-slate-300 leading-relaxed">Para liberar o link de acesso remoto:</p>
+                    <ol class="text-xs text-slate-400 list-decimal list-inside space-y-1">
+                        <li>Acesse gratuitamente <a href="https://dashboard.ngrok.com/get-started/your-authtoken" target="_blank" class="text-indigo-400 underline font-medium">dashboard.ngrok.com</a></li>
+                        <li>Copie o seu <strong>Your Authtoken</strong></li>
+                        <li>Cole o token no menu de <strong>Configurações Gerais</strong></li>
+                    </ol>
+                </div>
+
+                <!-- Visualização de Erro -->
+                <div id="ngrok-error-view" class="hidden text-left bg-rose-500/10 p-4 rounded-2xl border border-rose-500/30 space-y-2 mb-4">
+                    <div class="flex items-center gap-2 text-rose-400 font-semibold text-xs">
+                        <i data-lucide="alert-circle" class="w-4 h-4"></i>
+                        <span>Erro ao Iniciar Túnel</span>
+                    </div>
+                    <p id="ngrok-error-msg" class="text-xs text-rose-300"></p>
+                </div>
+
+                <div class="mt-6">
+                    <button onclick="app.actionNgrok('restart')" class="w-full bg-slate-700 hover:bg-slate-600 text-white py-2.5 rounded-xl text-sm font-semibold transition active:scale-95 flex items-center justify-center gap-2">
+                        <i data-lucide="refresh-cw" class="w-4 h-4"></i> Reiniciar Túnel
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    </div><!-- /#app-screen -->
 
     <script src="/js/app.js"></script>
     <script>

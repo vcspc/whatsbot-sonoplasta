@@ -1,45 +1,37 @@
-import { db, logMessage, getPhoneByLid } from '../config/database.js';
+import { db, logMessage, getPhoneByLid, getSetting } from '../config/database.js';
 import { arePhonesEqual, normalizePhone } from '../utils/formatter.js';
+import { getZonedParts, addDaysToDateString, getSafeTimezone } from '../utils/timezone.js';
 
 /**
  * Calcula a próxima data de execução no formato YYYY-MM-DD.
  */
-export function calculateNextRunDate(recurrence, dayOfWeek, eventTime, fromDate = new Date()) {
-  const pad = n => String(n).padStart(2, '0');
-  const formatDate = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-
-  const now = new Date(fromDate);
-  const [eventH, eventM] = (eventTime || '19:30').split(':').map(Number);
+export function calculateNextRunDate(recurrence, dayOfWeek, eventTime, fromDate = new Date(), customTimezone = null) {
+  const tz = customTimezone ? getSafeTimezone(customTimezone) : getSetting('timezone', 'America/Sao_Paulo');
+  const { dateStr, timeStr, dayOfWeek: currentDay } = getZonedParts(fromDate, tz);
+  const normalizedEventTime = (eventTime || '19:30').slice(0, 5);
 
   if (recurrence === 'DAILY') {
-    const todayEvent = new Date(now.getFullYear(), now.getMonth(), now.getDate(), eventH, eventM, 0);
-    if (todayEvent.getTime() > now.getTime()) {
-      return formatDate(now);
+    if (normalizedEventTime > timeStr) {
+      return dateStr;
     }
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    return formatDate(tomorrow);
+    return addDaysToDateString(dateStr, 1);
   }
 
   if (recurrence === 'WEEKLY') {
     const targetDay = dayOfWeek !== undefined && dayOfWeek !== null ? Number(dayOfWeek) : 0;
-    const currentDay = now.getDay();
     let daysUntil = (targetDay - currentDay + 7) % 7;
 
     if (daysUntil === 0) {
-      const todayEvent = new Date(now.getFullYear(), now.getMonth(), now.getDate(), eventH, eventM, 0);
-      if (todayEvent.getTime() <= now.getTime()) {
+      if (normalizedEventTime <= timeStr) {
         daysUntil = 7; // Próxima semana
       }
     }
 
-    const nextDate = new Date(now);
-    nextDate.setDate(nextDate.getDate() + daysUntil);
-    return formatDate(nextDate);
+    return addDaysToDateString(dateStr, daysUntil);
   }
 
   // Se for ONCE ou padrão
-  return formatDate(now);
+  return dateStr;
 }
 
 /**
@@ -249,11 +241,9 @@ export function updateScheduleItemContent(itemId, newContent) {
  * - Mantém os itens imutáveis intactos!
  * - Reseta os marcadores de lembrete e alerta do sonoplasta.
  */
-export function renewCompletedSchedules() {
-  const now = new Date();
-  const pad = n => String(n).padStart(2, '0');
-  const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-  const currentTimeStr = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+export function renewCompletedSchedules(customTimezone = null) {
+  const tz = customTimezone ? getSafeTimezone(customTimezone) : getSetting('timezone', 'America/Sao_Paulo');
+  const { dateStr: todayStr, timeStr: currentTimeStr } = getZonedParts(new Date(), tz);
 
   const schedules = db.prepare('SELECT * FROM schedules').all();
 
@@ -268,7 +258,8 @@ export function renewCompletedSchedules() {
           schedule.recurrence,
           schedule.day_of_week,
           schedule.event_time,
-          new Date(now.getTime() + 24 * 60 * 60 * 1000) // Calcula a partir de amanhã
+          new Date(),
+          tz
         );
 
         // Atualiza a data e reseta flags de envio

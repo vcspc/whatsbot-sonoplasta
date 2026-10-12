@@ -164,8 +164,9 @@ async function runTestSuite() {
   console.log('\n9. Teste de Formatação para o WhatsApp:');
   const sonoplastaScheduleMsg = formatScheduleForWhatsApp(updatedSchedule, updatedSchedule.items);
   assert(sonoplastaScheduleMsg.includes('*CRONOGRAMA DO CULTO*'), 'Mensagem do Sonoplasta contém cabeçalho em Markdown');
-  assert(sonoplastaScheduleMsg.includes('Harpa Cristã 15 - Foi na Cruz'), 'Mensagem contém louvor preenchido');
-  assert(sonoplastaScheduleMsg.includes('*(Item Fixo)*'), 'Mensagem identifica momentos imutáveis');
+  assert(sonoplastaScheduleMsg.includes('19:30 Hino Inicial: Harpa Cristã 15 - Foi na Cruz'), 'Mensagem contém louvor preenchido no padrão "HORÁRIO NOME: CONTEÚDO"');
+  assert(!sonoplastaScheduleMsg.includes('*(Item Fixo)*'), 'Mensagem do Sonoplasta não contém tag técnica de item fixo');
+  assert(!sonoplastaScheduleMsg.includes('Responsável'), 'Mensagem do Sonoplasta não contém detalhes técnicos de responsável');
 
   const reminderMsg = formatReminderMessage('Irmã Rosana', updatedSchedule, [hinoInicial]);
   assert(reminderMsg.includes('Olá, *Irmã Rosana*!'), 'Lembrete da véspera cumprimenta o responsável');

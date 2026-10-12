@@ -1,6 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { config } from './env.js';
 
 if (!fs.existsSync(config.dataDir)) {
@@ -61,6 +62,12 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS lid_mappings (
     lid TEXT PRIMARY KEY,
     phone TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS sessions (
+    token TEXT PRIMARY KEY,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL
   );
 `);
 
@@ -123,6 +130,117 @@ if (config.geminiApiKey && !getSetting('gemini_api_key')) {
 if (config.botName && !getSetting('bot_name')) {
   setSetting('bot_name', config.botName);
 }
+if (!getSetting('timezone')) {
+  setSetting('timezone', config.timezone || 'America/Sao_Paulo');
+}
+if (!getSetting('reminder_time')) {
+  setSetting('reminder_time', config.reminderTime || '09:00');
+}
+if (config.ngrokAuthToken && !getSetting('ngrok_authtoken')) {
+  setSetting('ngrok_authtoken', config.ngrokAuthToken);
+}
+if (config.ngrokDomain && !getSetting('ngrok_domain')) {
+  setSetting('ngrok_domain', config.ngrokDomain);
+}
+if (!getSetting('ngrok_enabled')) {
+  setSetting('ngrok_enabled', config.ngrokEnabled ? '1' : '0');
+}
+
+// Helpers de Autenticação Coletiva
+export function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
+  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+  return { hash, salt };
+}
+
+export function verifyPassword(password, storedHash, salt) {
+  if (!password || !storedHash || !salt) return false;
+  try {
+    const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+    return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), Buffer.from(storedHash, 'hex'));
+  } catch {
+    return false;
+  }
+}
+
+export function initAuthCredentials() {
+  if (!getSetting('auth_username')) {
+    setSetting('auth_username', config.adminUser || 'admin');
+  }
+  if (!getSetting('auth_password_hash') || !getSetting('auth_salt')) {
+    const initialPass = config.adminPassword || 'admin123';
+    const { hash, salt } = hashPassword(initialPass);
+    setSetting('auth_password_hash', hash);
+    setSetting('auth_salt', salt);
+    console.log(`[Auth] Credenciais coletivas inicializadas: Usuário "${getSetting('auth_username')}" (Senha padrão: ${initialPass})`);
+  }
+}
+
+export function validateCredentials(username, password) {
+  const currentUsername = getSetting('auth_username', 'admin');
+  const storedHash = getSetting('auth_password_hash', '');
+  const salt = getSetting('auth_salt', '');
+
+  if (!username || !password) return false;
+  if (username.trim().toLowerCase() !== currentUsername.trim().toLowerCase()) return false;
+  return verifyPassword(password, storedHash, salt);
+}
+
+export function changeCredentials(newUsername, newPassword) {
+  if (newUsername && newUsername.trim()) {
+    setSetting('auth_username', newUsername.trim());
+  }
+  if (newPassword && newPassword.trim()) {
+    const { hash, salt } = hashPassword(newPassword.trim());
+    setSetting('auth_password_hash', hash);
+    setSetting('auth_salt', salt);
+  }
+  return true;
+}
+
+export function createSession() {
+  const token = crypto.randomBytes(32).toString('hex');
+  const now = Date.now();
+  const expiresAt = now + 7 * 24 * 60 * 60 * 1000; // 7 dias
+
+  db.prepare('INSERT INTO sessions (token, created_at, expires_at) VALUES (?, ?, ?)').run(token, now, expiresAt);
+  return { token, expiresAt };
+}
+
+export function isValidSession(token) {
+  if (!token) return false;
+  try {
+    const row = db.prepare('SELECT expires_at FROM sessions WHERE token = ?').get(token);
+    if (!row) return false;
+    if (row.expires_at <= Date.now()) {
+      db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function deleteSession(token) {
+  if (!token) return;
+  try {
+    db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
+  } catch (err) {
+    console.error('Erro ao deletar sessão:', err);
+  }
+}
+
+export function cleanupExpiredSessions() {
+  try {
+    db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(Date.now());
+  } catch (err) {
+    console.error('Erro ao limpar sessões expiradas:', err);
+  }
+}
+
+// Inicializa credenciais coletivas e limpa sessões antigas
+initAuthCredentials();
+cleanupExpiredSessions();
 
 export function logMessage(level, message) {
   try {

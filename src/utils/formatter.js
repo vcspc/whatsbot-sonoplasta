@@ -42,7 +42,7 @@ export function arePhonesEqual(phone1, phone2) {
       const num2 = p2.slice(4);
       // Caso um tenha 9 e o outro 8 dígitos
       if ((num1.length === 9 && num2.length === 8 && num1.slice(1) === num2) ||
-          (num2.length === 9 && num1.length === 8 && num2.slice(1) === num1)) {
+        (num2.length === 9 && num1.length === 8 && num2.slice(1) === num1)) {
         return true;
       }
     }
@@ -67,6 +67,7 @@ export function formatDateBR(dateIso) {
 
 /**
  * Formata o cronograma completo para mensagem do WhatsApp (Markdown rico).
+ * Formato estético e limpo para a sonoplastia (sem dados técnicos ou responsáveis).
  */
 export function formatScheduleForWhatsApp(schedule, items) {
   const dateFormatted = formatDateBR(schedule.next_run_date);
@@ -88,23 +89,17 @@ export function formatScheduleForWhatsApp(schedule, items) {
   });
 
   for (const item of sortedItems) {
-    const immutableTag = item.is_immutable ? ' 🔒 *(Item Fixo)*' : '';
-    message += `⏰ *${item.item_time}* — *${item.name}*${immutableTag}\n`;
+    const time = (item.item_time || '').slice(0, 5);
+    const content = item.content && item.content.trim() ? item.content.trim().replace(/\r?\n+/g, ' / ') : '';
 
-    if (item.responsible_name) {
-      message += `👤 *Responsável:* ${item.responsible_name}\n`;
-    }
-
-    if (item.content && item.content.trim()) {
-      message += `🎶 *Conteúdo:* ${item.content.trim()}\n`;
+    if (content) {
+      message += `*${time} ${item.name}:* ${content}\n`;
     } else {
-      message += `⚠️ *Conteúdo:* _(Pendente de envio)_\n`;
+      message += `*${time} ${item.name}\n*`;
     }
-
-    message += `\n`;
   }
 
-  message += `━━━━━━━━━━━━━━━━━━━━\n`;
+  message += `\n━━━━━━━━━━━━━━━━━━━━\n`;
   message += `_Mensagem gerada automaticamente pelo WhatsBot Sonoplasta._`;
 
   return message;

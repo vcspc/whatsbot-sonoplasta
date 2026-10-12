@@ -10,6 +10,8 @@ import {
 import { getSetting, setSetting, db } from '../config/database.js';
 import { formatScheduleForWhatsApp, formatReminderMessage } from '../utils/formatter.js';
 import { sendWhatsAppMessage } from '../services/baileys.js';
+import { getSafeTimezone, getSafeReminderTime, getZonedParts } from '../utils/timezone.js';
+import { getNgrokStatus, restartNgrokTunnel } from '../services/ngrok.js';
 
 const router = Router();
 
@@ -154,6 +156,54 @@ router.post('/schedules/:id/remind-now', async (req, res) => {
   }
 });
 
+// --- RELÓGIO & TEMPO ---
+
+router.get('/time', (req, res) => {
+  try {
+    const tz = getSafeTimezone(getSetting('timezone', 'America/Sao_Paulo'));
+    const reminderTime = getSafeReminderTime(getSetting('reminder_time', '09:00'));
+    const now = new Date();
+    const parts = getZonedParts(now, tz);
+
+    res.json({
+      success: true,
+      timezone: tz,
+      reminder_time: reminderTime,
+      timestamp: now.getTime(),
+      date: parts.dateStr,
+      time: `${String(parts.hour).padStart(2, '0')}:${String(parts.minute).padStart(2, '0')}:${String(parts.second).padStart(2, '0')}`,
+      day_of_week: parts.dayOfWeek
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// --- SISTEMA / NGROK ---
+
+router.get('/system/ngrok', (req, res) => {
+  try {
+    const status = getNgrokStatus();
+    res.json({ success: true, ...status });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/system/ngrok/restart', async (req, res) => {
+  try {
+    const url = await restartNgrokTunnel();
+    const status = getNgrokStatus();
+    res.json({
+      success: true,
+      message: url ? `Túnel iniciado com sucesso: ${url}` : 'Tentativa de reinício concluída.',
+      ...status
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // --- CONFIGURAÇÕES ---
 
 router.get('/settings', (req, res) => {
@@ -164,7 +214,14 @@ router.get('/settings', (req, res) => {
         sonoplasta_phone: getSetting('sonoplasta_phone', ''),
         gemini_api_key: getSetting('gemini_api_key', '') ? '••••••••' + getSetting('gemini_api_key').slice(-4) : '',
         has_gemini_key: Boolean(getSetting('gemini_api_key', '')),
-        bot_name: getSetting('bot_name', 'WhatsBot Sonoplasta')
+        bot_name: getSetting('bot_name', 'WhatsBot Sonoplasta'),
+        timezone: getSafeTimezone(getSetting('timezone', 'America/Sao_Paulo')),
+        reminder_time: getSafeReminderTime(getSetting('reminder_time', '09:00')),
+        ngrok_authtoken: getSetting('ngrok_authtoken', '') ? '••••••••' + getSetting('ngrok_authtoken').slice(-4) : '',
+        has_ngrok_token: Boolean(getSetting('ngrok_authtoken', '')),
+        ngrok_domain: getSetting('ngrok_domain', ''),
+        ngrok_enabled: getSetting('ngrok_enabled', '1') !== '0',
+        auth_username: getSetting('auth_username', 'admin')
       }
     });
   } catch (err) {
@@ -174,7 +231,18 @@ router.get('/settings', (req, res) => {
 
 router.post('/settings', (req, res) => {
   try {
-    const { sonoplasta_phone, gemini_api_key, bot_name } = req.body;
+    const {
+      sonoplasta_phone,
+      gemini_api_key,
+      bot_name,
+      timezone,
+      reminder_time,
+      ngrok_authtoken,
+      ngrok_domain,
+      ngrok_enabled
+    } = req.body;
+
+    let shouldRestartNgrok = false;
 
     if (sonoplasta_phone !== undefined) {
       setSetting('sonoplasta_phone', sonoplasta_phone);
@@ -184,6 +252,30 @@ router.post('/settings', (req, res) => {
     }
     if (bot_name !== undefined) {
       setSetting('bot_name', bot_name);
+    }
+    if (timezone !== undefined) {
+      setSetting('timezone', getSafeTimezone(timezone));
+    }
+    if (reminder_time !== undefined) {
+      setSetting('reminder_time', getSafeReminderTime(reminder_time));
+    }
+    if (ngrok_authtoken !== undefined && !ngrok_authtoken.startsWith('••••')) {
+      setSetting('ngrok_authtoken', ngrok_authtoken.trim());
+      shouldRestartNgrok = true;
+    }
+    if (ngrok_domain !== undefined) {
+      setSetting('ngrok_domain', ngrok_domain.trim());
+      shouldRestartNgrok = true;
+    }
+    if (ngrok_enabled !== undefined) {
+      setSetting('ngrok_enabled', ngrok_enabled ? '1' : '0');
+      shouldRestartNgrok = true;
+    }
+
+    if (shouldRestartNgrok) {
+      restartNgrokTunnel().catch(err => {
+        console.error('[Ngrok] Erro ao reiniciar túnel após salvar configurações:', err.message);
+      });
     }
 
     res.json({ success: true, message: 'Configurações salvas com sucesso' });
