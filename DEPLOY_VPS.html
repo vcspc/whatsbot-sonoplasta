@@ -1,0 +1,840 @@
+<title>Manual VPS WhatsBot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+/* Layout concept: Professional DevOps runbook with interactive step-by-step checklist and copyable commands */
+:root {
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --surface-subtle: #f1f5f9;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --text: #0f172a;
+  --text-muted: #64748b;
+  --accent: #2563eb;
+  --accent-subtle: #eff6ff;
+  --accent-text: #1d4ed8;
+  --success: #16a34a;
+  --success-subtle: #f0fdf4;
+  --warning: #d97706;
+  --warning-subtle: #fffbeb;
+  --danger: #dc2626;
+  --danger-subtle: #fef2f2;
+  --code-bg: #0f172a;
+  --code-fg: #e2e8f0;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --font-main: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #090d16;
+    --surface: #111827;
+    --surface-subtle: #1a2234;
+    --border: #1f293d;
+    --border-strong: #374151;
+    --text: #f9fafb;
+    --text-muted: #9ca3af;
+    --accent: #3b82f6;
+    --accent-subtle: #1e293b;
+    --accent-text: #93c5fd;
+    --success: #22c55e;
+    --success-subtle: #143522;
+    --warning: #f59e0b;
+    --warning-subtle: #3a250a;
+    --danger: #ef4444;
+    --danger-subtle: #3b1414;
+    --code-bg: #030712;
+    --code-fg: #f3f4f6;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #090d16;
+  --surface: #111827;
+  --surface-subtle: #1a2234;
+  --border: #1f293d;
+  --border-strong: #374151;
+  --text: #f9fafb;
+  --text-muted: #9ca3af;
+  --accent: #3b82f6;
+  --accent-subtle: #1e293b;
+  --accent-text: #93c5fd;
+  --success: #22c55e;
+  --success-subtle: #143522;
+  --warning: #f59e0b;
+  --warning-subtle: #3a250a;
+  --danger: #ef4444;
+  --danger-subtle: #3b1414;
+  --code-bg: #030712;
+  --code-fg: #f3f4f6;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-main);
+  line-height: 1.6;
+  padding-inline: 20px;
+  padding-block: 28px 60px;
+  -webkit-font-smoothing: antialiased;
+}
+
+.container {
+  max-width: 920px;
+  margin: 0 auto;
+}
+
+/* Header */
+.header {
+  margin-bottom: 28px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.badge-accent {
+  background: var(--accent-subtle);
+  color: var(--accent-text);
+  border-color: transparent;
+}
+
+.title {
+  font-size: clamp(1.8rem, 4vw, 2.4rem);
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: var(--text);
+  margin-bottom: 8px;
+  text-wrap: balance;
+}
+
+.subtitle {
+  font-size: 1.05rem;
+  color: var(--text-muted);
+  max-width: 720px;
+}
+
+/* Progress Tracker */
+.progress-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px 20px;
+  margin-bottom: 28px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.88rem;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.progress-track {
+  height: 8px;
+  background: var(--surface-subtle);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  transition: width 0.3s ease;
+  border-radius: 9999px;
+}
+
+/* Alert boxes */
+.alert {
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  margin-block: 16px;
+  font-size: 0.92rem;
+  border-left: 4px solid;
+}
+
+.alert-warning {
+  background: var(--warning-subtle);
+  color: var(--text);
+  border-color: var(--warning);
+}
+
+.alert-info {
+  background: var(--accent-subtle);
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.alert-title {
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+
+/* Step Card */
+.step-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 22px;
+  margin-bottom: 22px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.step-card:hover {
+  border-color: var(--border-strong);
+}
+
+.step-card.completed {
+  border-color: var(--success);
+  background: linear-gradient(to bottom, var(--surface), var(--success-subtle));
+}
+
+.step-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.step-checkbox-wrap {
+  padding-top: 2px;
+}
+
+.step-check {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.step-title-area {
+  flex: 1;
+  min-width: 0;
+}
+
+.step-number {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent-text);
+  margin-bottom: 2px;
+}
+
+.step-title {
+  font-size: 1.22rem;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--text);
+}
+
+.step-desc {
+  font-size: 0.93rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* Code box */
+.code-box {
+  position: relative;
+  background: var(--code-bg);
+  border-radius: var(--radius-md);
+  margin-block: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.code-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: #94a3b8;
+}
+
+.code-content {
+  padding: 14px;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+  color: var(--code-fg);
+  line-height: 1.5;
+  white-space: pre;
+}
+
+.copy-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #f1f5f9;
+  font-size: 0.74rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: var(--font-main);
+}
+
+.copy-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.copy-btn.copied {
+  background: var(--success);
+  border-color: var(--success);
+  color: #ffffff;
+}
+
+/* Tip / Notes list */
+.notes-list {
+  list-style: none;
+  margin-top: 10px;
+}
+
+.notes-list li {
+  position: relative;
+  padding-left: 20px;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.notes-list li::before {
+  content: "•";
+  position: absolute;
+  left: 6px;
+  color: var(--accent);
+  font-weight: bold;
+}
+
+/* Quick Commands Table */
+.commands-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.command-card {
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+}
+
+.command-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.command-cmd {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--text);
+  background: var(--surface);
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  word-break: break-all;
+}
+
+/* Footer */
+.footer {
+  margin-top: 40px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+@media (max-width: 600px) {
+  body {
+    padding-inline: 14px;
+    padding-block: 18px 40px;
+  }
+  .step-card {
+    padding: 16px;
+  }
+}
+</style>
+
+<div class="container">
+  <header class="header">
+    <div class="badge-row">
+      <span class="badge badge-accent">Ubuntu 22.04 / 24.04</span>
+      <span class="badge">Node.js 22 LTS</span>
+      <span class="badge">Playwright Headless</span>
+      <span class="badge">PM2 + Nginx</span>
+    </div>
+    <h1 class="title">Manual de Instalação em VPS</h1>
+    <p class="subtitle">Guia interativo passo a passo para instalar, configurar e manter o <strong>WhatsBot Sonoplasta</strong> funcionando 24 horas por dia em ambiente de produção.</p>
+  </header>
+
+  <!-- Barra de Progresso Interativa -->
+  <div class="progress-card">
+    <div class="progress-header">
+      <span>Progresso da Instalação</span>
+      <span id="progress-label" style="color: var(--accent-text);">0 de 10 etapas concluídas (0%)</span>
+    </div>
+    <div class="progress-track">
+      <div class="progress-bar" id="progress-bar"></div>
+    </div>
+  </div>
+
+  <div class="alert alert-warning">
+    <div>⚠️</div>
+    <div>
+      <div class="alert-title">Requisito Crítico: Node.js 22.5.0 ou superior</div>
+      <div>O WhatsBot utiliza o banco de dados nativo <code>node:sqlite</code>, que só existe a partir do Node.js 22. Versões como Node 18 ou Node 20 <strong>não</strong> funcionarão.</div>
+    </div>
+  </div>
+
+  <!-- ETAPA 1 -->
+  <article class="step-card" id="card-step-1">
+    <div class="step-header">
+      <div class="step-checkbox-wrap">
+        <input type="checkbox" class="step-check" id="check-1" onchange="onStepCheck(1)">
+      </div>
+      <div class="step-title-area">
+        <div class="step-number">Etapa 1</div>
+        <h2 class="step-title">Conectar na VPS e Atualizar Pacotes</h2>
+        <p class="step-desc">Acesse o servidor via SSH, sincronize os repositórios e acerte o fuso horário oficial de Brasília.</p>
+      </div>
+    </div>
+    <div class="code-box">
+      <div class="code-header">
+        <span>terminal (ssh)</span>
+        <button class="copy-btn" onclick="copyCode(this)">Copiar</button>
+      </div>
+      <div class="code-content"><code># Acesse o servidor remoto
+ssh root@SEU_IP_DA_VPS
+
+# Atualize os pacotes do sistema operacional
+sudo apt update && sudo apt upgrade -y
+
+# Instale os utilitários básicos
+sudo apt install -y curl wget git build-essential ufw software-properties-common
+
+# Defina o fuso horário para garantir agendamento correto de lembretes e cultos
+sudo timedatectl set-timezone America/Sao_Paulo</code></div>
+    </div>
+  </article>
+
+  <!-- ETAPA 2 -->
+  <article class="step-card" id="card-step-2">
+    <div class="step-header">
+      <div class="step-checkbox-wrap">
+        <input type="checkbox" class="step-check" id="check-2" onchange="onStepCheck(2)">
+      </div>
+      <div class="step-title-area">
+        <div class="step-number">Etapa 2</div>
+        <h2 class="step-title">Criar Memória Swap de 2 GB (Prevenção OOM)</h2>
+        <p class="step-desc">O Chromium do Playwright necessita de memória em picos. A Swap evita que o processo do bot seja finalizado abruptamente em VPSs de 1GB ou 2GB de RAM.</p>
+      </div>
+    </div>
+    <div class="code-box">
+      <div class="code-header">
+        <span>terminal</span>
+        <button class="copy-btn" onclick="copyCode(this)">Copiar</button>
+      </div>
+      <div class="code-content"><code># Cria o arquivo de swap de 2GB
+sudo fallocate -l 2G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+
+# Torna permanente após reiniciar a VPS
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+
+# Confirma que a swap está ativa
+free -h</code></div>
+    </div>
+  </article>
+
+  <!-- ETAPA 3 -->
+  <article class="step-card" id="card-step-3">
+    <div class="step-header">
+      <div class="step-checkbox-wrap">
+        <input type="checkbox" class="step-check" id="check-3" onchange="onStepCheck(3)">
+      </div>
+      <div class="step-title-area">
+        <div class="step-number">Etapa 3</div>
+        <h2 class="step-title">Instalar Node.js 22 LTS e PM2</h2>
+        <p class="step-desc">Adiciona o repositório NodeSource v22.x e instala globalmente o gerenciador PM2.</p>
+      </div>
+    </div>
+    <div class="code-box">
+      <div class="code-header">
+        <span>terminal</span>
+        <button class="copy-btn" onclick="copyCode(this)">Copiar</button>
+      </div>
+      <div class="code-content"><code># Instala o repositório oficial do Node 22 LTS
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs
+
+# Valida as versões
+node -v   # Deve exibir v22.x.x
+npm -v
+
+# Instala o PM2 para gerenciamento contínuo em segundo plano
+sudo npm install -g pm2</code></div>
+    </div>
+  </article>
+
+  <!-- ETAPA 4 -->
+  <article class="step-card" id="card-step-4">
+    <div class="step-header">
+      <div class="step-checkbox-wrap">
+        <input type="checkbox" class="step-check" id="check-4" onchange="onStepCheck(4)">
+      </div>
+      <div class="step-title-area">
+        <div class="step-number">Etapa 4</div>
+        <h2 class="step-title">Clonar o Repositório e Instalar Pacotes</h2>
+        <p class="step-desc">Cria a pasta do projeto no servidor e baixa o código-fonte.</p>
+      </div>
+    </div>
+    <div class="code-box">
+      <div class="code-header">
+        <span>terminal</span>
+        <button class="copy-btn" onclick="copyCode(this)">Copiar</button>
+      </div>
+      <div class="code-content"><code># Cria e ajusta permissões da pasta
+sudo mkdir -p /var/www/whatsbot-soplasta
+sudo chown -R $USER:$USER /var/www/whatsbot-soplasta
+cd /var/www/whatsbot-soplasta
+
+# Clona o repositório do projeto
+git clone https://github.com/SEU_USUARIO/whatsbot-soplasta.git .
+
+# Instala as dependências Node
+npm install --omit=dev</code></div>
+    </div>
+  </article>
+
+  <!-- ETAPA 5 -->
+  <article class="step-card" id="card-step-5">
+    <div class="step-header">
+      <div class="step-checkbox-wrap">
+        <input type="checkbox" class="step-check" id="check-5" onchange="onStepCheck(5)">
+      </div>
+      <div class="step-title-area">
+        <div class="step-number">Etapa 5</div>
+        <h2 class="step-title">Instalar Playwright Chromium e Bibliotecas do Linux</h2>
+        <p class="step-desc">Essencial para extração automática de títulos de vídeos do YouTube no WhatsApp.</p>
+      </div>
+    </div>
+    <div class="code-box">
+      <div class="code-header">
+        <span>terminal</span>
+        <button class="copy-btn" onclick="copyCode(this)">Copiar</button>
+      </div>
+      <div class="code-content"><code># Baixa o navegador Chromium do Playwright
+npx playwright install chromium
+
+# Instala as dependências de sistema Linux (libnss3, libasound2, etc.)
+sudo npx playwright install-deps chromium</code></div>
+    </div>
+  </article>
+
+  <!-- ETAPA 6 -->
+  <article class="step-card" id="card-step-6">
+    <div class="step-header">
+      <div class="step-checkbox-wrap">
+        <input type="checkbox" class="step-check" id="check-6" onchange="onStepCheck(6)">
+      </div>
+      <div class="step-title-area">
+        <div class="step-number">Etapa 6</div>
+        <h2 class="step-title">Configurar o Arquivo .env</h2>
+        <p class="step-desc">Copie o arquivo de exemplo e defina suas chaves de API e credenciais de login.</p>
+      </div>
+    </div>
+    <div class="code-box">
+      <div class="code-header">
+        <span>terminal</span>
+        <button class="copy-btn" onclick="copyCode(this)">Copiar</button>
+      </div>
+      <div class="code-content"><code>cp .env.example .env
+nano .env</code></div>
+    </div>
+    <div class="code-box">
+      <div class="code-header">
+        <span>exemplo de .env na VPS</span>
+        <button class="copy-btn" onclick="copyCode(this)">Copiar</button>
+      </div>
+      <div class="code-content"><code>PORT=3000
+GEMINI_API_KEY=sua_chave_do_google_gemini
+SONOPLASTA_PHONE=5511999998888
+BOT_NAME=WhatsBot Sonoplasta
+TIMEZONE=America/Sao_Paulo
+REMINDER_TIME=09:00
+
+# Desative o túnel Ngrok ao utilizar Nginx com domínio próprio
+NGROK_ENABLED=false
+
+# Credenciais de acesso ao Painel Web (ALTERE PARA UMA SENHA SEGURA)
+ADMIN_USER=admin
+ADMIN_PASSWORD=SuaSenhaForteAqui123!</code></div>
+    </div>
+  </article>
+
+  <!-- ETAPA 7 -->
+  <article class="step-card" id="card-step-7">
+    <div class="step-header">
+      <div class="step-checkbox-wrap">
+        <input type="checkbox" class="step-check" id="check-7" onchange="onStepCheck(7)">
+      </div>
+      <div class="step-title-area">
+        <div class="step-number">Etapa 7</div>
+        <h2 class="step-title">Iniciar o Bot 24/7 com PM2</h2>
+        <p class="step-desc">Garante que a aplicação continue rodando após fechar a janela SSH e reinicie automaticamente no boot.</p>
+      </div>
+    </div>
+    <div class="code-box">
+      <div class="code-header">
+        <span>terminal</span>
+        <button class="copy-btn" onclick="copyCode(this)">Copiar</button>
+      </div>
+      <div class="code-content"><code># Inicia o processo utilizando o arquivo de ecossistema
+pm2 start ecosystem.config.cjs
+
+# Configura auto-start no boot do servidor
+pm2 startup
+# (Execute o comando sudo exibido no terminal se solicitado)
+
+# Salva a lista de processos ativos
+pm2 save</code></div>
+    </div>
+  </article>
+
+  <!-- ETAPA 8 -->
+  <article class="step-card" id="card-step-8">
+    <div class="step-header">
+      <div class="step-checkbox-wrap">
+        <input type="checkbox" class="step-check" id="check-8" onchange="onStepCheck(8)">
+      </div>
+      <div class="step-title-area">
+        <div class="step-number">Etapa 8</div>
+        <h2 class="step-title">Configurar Nginx e SSL Gratuito (HTTPS)</h2>
+        <p class="step-desc">Permite acessar o painel de forma segura através do seu domínio (ex: <code>bot.suaigreja.com.br</code>).</p>
+      </div>
+    </div>
+    <div class="code-box">
+      <div class="code-header">
+        <span>terminal</span>
+        <button class="copy-btn" onclick="copyCode(this)">Copiar</button>
+      </div>
+      <div class="code-content"><code># Instala Nginx e Certbot
+sudo apt install -y nginx certbot python3-certbot-nginx
+
+# Cria o arquivo de configuração do site
+sudo nano /etc/nginx/sites-available/whatsbot</code></div>
+    </div>
+    <div class="code-box">
+      <div class="code-header">
+        <span>/etc/nginx/sites-available/whatsbot</span>
+        <button class="copy-btn" onclick="copyCode(this)">Copiar</button>
+      </div>
+      <div class="code-content"><code>server {
+    listen 80;
+    server_name bot.suaigreja.com.br;
+
+    client_max_body_size 20M;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}</code></div>
+    </div>
+    <div class="code-box">
+      <div class="code-header">
+        <span>ativar e gerar SSL</span>
+        <button class="copy-btn" onclick="copyCode(this)">Copiar</button>
+      </div>
+      <div class="code-content"><code># Ativa o site e reinicia o Nginx
+sudo ln -s /etc/nginx/sites-available/whatsbot /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx
+
+# Gera o certificado HTTPS com renovação automática
+sudo certbot --nginx -d bot.suaigreja.com.br</code></div>
+    </div>
+  </article>
+
+  <!-- ETAPA 9 -->
+  <article class="step-card" id="card-step-9">
+    <div class="step-header">
+      <div class="step-checkbox-wrap">
+        <input type="checkbox" class="step-check" id="check-9" onchange="onStepCheck(9)">
+      </div>
+      <div class="step-title-area">
+        <div class="step-number">Etapa 9</div>
+        <h2 class="step-title">Ativar o Firewall (UFW)</h2>
+        <p class="step-desc">Protege a VPS permitindo apenas tráfego SSH e Web HTTP/HTTPS.</p>
+      </div>
+    </div>
+    <div class="code-box">
+      <div class="code-header">
+        <span>terminal</span>
+        <button class="copy-btn" onclick="copyCode(this)">Copiar</button>
+      </div>
+      <div class="code-content"><code>sudo ufw allow OpenSSH
+sudo ufw allow 'Nginx Full'
+sudo ufw enable
+sudo ufw status</code></div>
+    </div>
+  </article>
+
+  <!-- ETAPA 10 -->
+  <article class="step-card" id="card-step-10">
+    <div class="step-header">
+      <div class="step-checkbox-wrap">
+        <input type="checkbox" class="step-check" id="check-10" onchange="onStepCheck(10)">
+      </div>
+      <div class="step-title-area">
+        <div class="step-number">Etapa 10</div>
+        <h2 class="step-title">Conectar o WhatsApp</h2>
+        <p class="step-desc">Abra o painel web ou os logs do PM2 para ler o QR Code de autenticação do Baileys.</p>
+      </div>
+    </div>
+    <ul class="notes-list">
+      <li>Acesse seu painel no navegador: <strong><code>https://bot.suaigreja.com.br</code></strong></li>
+      <li>Faça login com seu usuário e senha definidos no <code>.env</code>.</li>
+      <li>Clique no botão de status do <strong>WhatsApp</strong> no canto superior direito.</li>
+      <li>No seu celular, abra <strong>WhatsApp &gt; Aparelhos conectados &gt; Conectar um aparelho</strong> e aponte para o QR Code.</li>
+      <li>Você também pode visualizar o QR Code via terminal com: <code>pm2 logs whatsbot --lines 100</code></li>
+    </ul>
+  </article>
+
+  <!-- COMANDOS ÚTEIS -->
+  <section style="margin-top: 32px;">
+    <h3 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 12px;">Comandos Úteis de Manutenção</h3>
+    <div class="commands-grid">
+      <div class="command-card">
+        <div class="command-label">Ver logs do bot em tempo real</div>
+        <div class="command-cmd">pm2 logs whatsbot</div>
+      </div>
+      <div class="command-card">
+        <div class="command-label">Reiniciar o bot</div>
+        <div class="command-cmd">pm2 restart whatsbot</div>
+      </div>
+      <div class="command-card">
+        <div class="command-label">Monitorar CPU e Memória RAM</div>
+        <div class="command-cmd">pm2 monit</div>
+      </div>
+      <div class="command-card">
+        <div class="command-label">Backup completo compactado</div>
+        <div class="command-cmd">tar -czvf backup-$(date +%F).tar.gz data/ baileys_auth_info/ .env</div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <p>WhatsBot Sonoplasta • Manual de Operações e Infraestrutura</p>
+  </footer>
+</div>
+
+<script>
+function copyCode(btn) {
+  const codeBox = btn.closest('.code-box');
+  const codeEl = codeBox.querySelector('code');
+  if (!codeEl) return;
+
+  const text = codeEl.innerText;
+  navigator.clipboard.writeText(text).then(() => {
+    const originalText = btn.innerText;
+    btn.innerText = 'Copiado!';
+    btn.classList.add('copied');
+    setTimeout(() => {
+      btn.innerText = originalText;
+      btn.classList.remove('copied');
+    }, 2000);
+  }).catch(() => {
+    // Fallback seleção
+    const range = document.createRange();
+    range.selectNodeContents(codeEl);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  });
+}
+
+function onStepCheck(stepNum) {
+  const check = document.getElementById('check-' + stepNum);
+  const card = document.getElementById('card-step-' + stepNum);
+  if (check && card) {
+    if (check.checked) {
+      card.classList.add('completed');
+    } else {
+      card.classList.remove('completed');
+    }
+  }
+  updateProgress();
+}
+
+function updateProgress() {
+  const checkboxes = document.querySelectorAll('.step-check');
+  const checked = document.querySelectorAll('.step-check:checked');
+  const total = checkboxes.length;
+  const count = checked.length;
+  const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+
+  const bar = document.getElementById('progress-bar');
+  const label = document.getElementById('progress-label');
+
+  if (bar) bar.style.width = pct + '%';
+  if (label) label.innerText = `${count} de ${total} etapas concluídas (${pct}%)`;
+}
+</script>

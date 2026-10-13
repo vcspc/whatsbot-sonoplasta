@@ -30,6 +30,11 @@ async function runAuthTests() {
   console.log('🔐 TESTES DE AUTENTICAÇÃO E SESSÃO COLETIVA');
   console.log('======================================================\n');
 
+  // Salva credenciais originais para restaurar no final
+  const originalAuthUser = getSetting('auth_username', 'admin');
+  const originalAuthHash = getSetting('auth_password_hash', '');
+  const originalAuthSalt = getSetting('auth_salt', '');
+
   // 1. Testes de Hashing e Verificação de Senha
   console.log('1. Criptografia e Verificação de Senha:');
   const { hash, salt } = hashPassword('minhaSenhaSegura');
@@ -39,6 +44,9 @@ async function runAuthTests() {
   assert(!verifyPassword('senhaErrada', hash, salt), 'Senha incorreta rejeitada');
   assert(!verifyPassword('', hash, salt), 'Senha vazia rejeitada');
   assert(!verifyPassword(null, hash, salt), 'Null rejeitado');
+
+  // Garante credenciais padrão para os testes
+  changeCredentials('admin', 'admin123');
 
   // 2. Validação de Credenciais Coletivas Padrão
   console.log('\n2. Credenciais Coletivas do Sistema:');
@@ -134,9 +142,16 @@ async function runAuthTests() {
   await stopNgrokTunnel();
   assert(getNgrokStatus().status === 'DISCONNECTED', 'stopNgrokTunnel redefine status para DISCONNECTED');
 
-  // Restaura configurações originais
+  // Restaura configurações e credenciais originais
   if (originalToken) {
     setSetting('ngrok_authtoken', originalToken);
+  }
+  if (originalAuthUser) {
+    setSetting('auth_username', originalAuthUser);
+  }
+  if (originalAuthHash && originalAuthSalt) {
+    setSetting('auth_password_hash', originalAuthHash);
+    setSetting('auth_salt', originalAuthSalt);
   }
 
   console.log(`\n======================================================`);

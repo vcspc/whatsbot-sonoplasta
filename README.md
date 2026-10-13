@@ -43,7 +43,7 @@ Bot inteligente de WhatsApp construído com **@whiskeysockets/baileys**, **Googl
 ## 🚀 Como Executar
 
 ### 1. Pré-requisitos
-- Node.js versão 20 ou superior (incluindo Node.js 26)
+- Node.js versão 22.5.0 ou superior (necessário para o módulo nativo `node:sqlite`)
 - Navegador Chromium para o Playwright
 
 ### 2. Instalação das Dependências
@@ -89,6 +89,14 @@ Abra o navegador em: **`http://localhost:3000`**
 3. Abra o **WhatsApp** no seu smartphone > **Aparelhos conectados** > **Conectar um aparelho**.
 4. Aponte a câmera para o QR Code exibido na tela (também é impresso no terminal).
 5. O bot estará conectado e pronto para funcionar!
+
+---
+
+## 🌐 Hospedagem em VPS Linux (24/7)
+
+Para colocar a aplicação rodando 24 horas por dia em uma VPS (Ubuntu/Debian) com **PM2**, **Nginx**, **SSL gratuito (HTTPS)** e persistência automática, consulte o guia completo em:
+
+👉 **[Guia Completo de Instalação e Deploy em VPS (DEPLOY_VPS.md)](./DEPLOY_VPS.md)**
 
 ---
 
