@@ -8,6 +8,7 @@ const app = {
   currentTimezone: 'America/Sao_Paulo',
   serverTimeOffset: 0,
   clockInterval: null,
+  currentMobileTab: 'schedules',
 
   async apiFetch(url, options = {}) {
     options.headers = options.headers || {};
@@ -166,6 +167,7 @@ const app = {
     this.loadSettings();
     this.loadSchedules();
     this.loadLogs();
+    this.switchMobileTab('schedules');
 
     if (window.lucide) {
       lucide.createIcons();
@@ -184,8 +186,63 @@ const app = {
     }, 10000);
   },
 
+  // --- NAVEGAÇÃO MOBILE (Padrão Web App) ---
+
+  switchMobileTab(tab) {
+    this.currentMobileTab = tab;
+    const views = {
+      schedules: document.getElementById('view-schedules'),
+      status: document.getElementById('view-status'),
+      settings: document.getElementById('view-settings'),
+      logs: document.getElementById('view-logs')
+    };
+
+    // Atualiza visibilidade no mobile
+    Object.keys(views).forEach(key => {
+      const el = views[key];
+      if (!el) return;
+      if (key === tab) {
+        el.classList.remove('hidden');
+      } else {
+        el.classList.add('hidden');
+      }
+    });
+
+    // Atualiza botões da barra inferior
+    const tabs = ['schedules', 'status', 'settings', 'logs'];
+    tabs.forEach(t => {
+      const btn = document.getElementById(`tab-btn-${t}`);
+      const indicator = btn?.querySelector('.tab-indicator');
+      if (btn) {
+        if (t === tab) {
+          btn.classList.remove('text-slate-400');
+          btn.classList.add('text-indigo-400', 'font-semibold');
+          indicator?.classList.remove('hidden');
+        } else {
+          btn.classList.remove('text-indigo-400', 'font-semibold');
+          btn.classList.add('text-slate-400');
+          indicator?.classList.add('hidden');
+        }
+      }
+
+      // Atualiza segmented control do topo
+      const segBtn = document.getElementById(`seg-btn-${t}`);
+      if (segBtn) {
+        if (t === tab) {
+          segBtn.className = 'flex-1 py-2 px-2 rounded-xl text-center transition flex items-center justify-center gap-1.5 bg-indigo-600 text-white shadow font-semibold';
+        } else {
+          segBtn.className = 'flex-1 py-2 px-2 rounded-xl text-center text-slate-400 hover:text-white transition flex items-center justify-center gap-1.5 font-medium';
+        }
+      }
+    });
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (window.lucide) lucide.createIcons();
+  },
+
   showAlert(message, type = 'success') {
     const container = document.getElementById('alerts-container');
+    if (!container) return;
     const alert = document.createElement('div');
     const colors = {
       success: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400',
@@ -193,12 +250,12 @@ const app = {
       info: 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400'
     };
 
-    alert.className = `p-4 rounded-xl border flex items-center justify-between text-sm shadow-lg transition-all transform duration-300 ${colors[type] || colors.info}`;
+    alert.className = `p-3.5 sm:p-4 rounded-xl border flex items-center justify-between text-xs sm:text-sm shadow-lg transition-all transform duration-300 ${colors[type] || colors.info}`;
     alert.innerHTML = `
       <div class="flex items-center gap-2">
         <span>${message}</span>
       </div>
-      <button onclick="this.parentElement.remove()" class="text-current opacity-70 hover:opacity-100">&times;</button>
+      <button onclick="this.parentElement.remove()" class="text-current opacity-70 hover:opacity-100 text-base font-bold ml-2">&times;</button>
     `;
 
     container.appendChild(alert);
@@ -212,16 +269,19 @@ const app = {
   showModal(modalId) {
     const modal = document.getElementById(modalId);
     const content = document.getElementById(`${modalId}-content`);
+    if (!modal || !content) return;
     modal.classList.remove('hidden');
     setTimeout(() => {
       content.classList.remove('scale-95', 'opacity-0');
       content.classList.add('scale-100', 'opacity-100');
     }, 10);
+    if (window.lucide) lucide.createIcons();
   },
 
   hideModal(modalId) {
     const modal = document.getElementById(modalId);
     const content = document.getElementById(`${modalId}-content`);
+    if (!modal || !content) return;
     content.classList.remove('scale-100', 'opacity-100');
     content.classList.add('scale-95', 'opacity-0');
     setTimeout(() => {
@@ -312,6 +372,10 @@ const app = {
       const sideDate = document.getElementById('sidebar-clock-date');
       const sideTz = document.getElementById('sidebar-clock-tz');
 
+      const mTime = document.getElementById('m-clock-time');
+      const mDate = document.getElementById('m-clock-date');
+      const mTz = document.getElementById('m-clock-tz');
+
       if (headerTime) headerTime.textContent = timeStr;
       if (headerDate) headerDate.textContent = dateClean;
       if (headerTz) headerTz.textContent = tzLabel;
@@ -319,6 +383,10 @@ const app = {
       if (sideTime) sideTime.textContent = timeStr;
       if (sideDate) sideDate.textContent = dateClean;
       if (sideTz) sideTz.textContent = tzLabel;
+
+      if (mTime) mTime.textContent = timeStr;
+      if (mDate) mDate.textContent = dateClean;
+      if (mTz) mTz.textContent = tzLabel;
     } catch (err) {
       console.error('Erro na formatação do relógio:', err);
     }
@@ -338,8 +406,12 @@ const app = {
   },
 
   renderWhatsAppStatus() {
+    if (!this.whatsappStatus) return;
+
     const badgeDot = document.getElementById('wa-status-dot');
     const badgeText = document.getElementById('wa-status-text');
+    const tabDot = document.getElementById('tab-status-dot');
+
     const modalStatus = document.getElementById('wa-modal-status-text');
     const loader = document.getElementById('wa-loader');
     const qrView = document.getElementById('wa-qr-view');
@@ -347,35 +419,61 @@ const app = {
     const qrImg = document.getElementById('wa-qr-img');
     const connectedPhone = document.getElementById('wa-connected-phone');
 
-    loader.classList.add('hidden');
-    qrView.classList.add('hidden');
-    connectedView.classList.add('hidden');
+    // Elementos da View Mobile Status
+    const mStatus = document.getElementById('m-wa-status-text');
+    const mLoader = document.getElementById('m-wa-loader');
+    const mQrView = document.getElementById('m-wa-qr-view');
+    const mConnectedView = document.getElementById('m-wa-connected-view');
+    const mQrImg = document.getElementById('m-wa-qr-img');
+    const mConnectedPhone = document.getElementById('m-wa-connected-phone');
+    const mDot = document.getElementById('m-wa-status-dot');
+
+    [loader, mLoader].forEach(el => el?.classList.add('hidden'));
+    [qrView, mQrView].forEach(el => el?.classList.add('hidden'));
+    [connectedView, mConnectedView].forEach(el => el?.classList.add('hidden'));
 
     if (this.whatsappStatus.status === 'CONNECTED') {
-      badgeDot.className = 'w-2 h-2 rounded-full bg-emerald-500 badge-pulse';
-      badgeText.innerText = 'WhatsApp Conectado';
-      modalStatus.innerText = 'Pronto para enviar e receber mensagens.';
-      connectedView.classList.remove('hidden');
-      connectedPhone.innerText = this.whatsappStatus.phoneNumber || 'Ativo';
+      if (badgeDot) badgeDot.className = 'w-2 h-2 rounded-full bg-emerald-500 badge-pulse shrink-0';
+      if (tabDot) tabDot.className = 'absolute -top-0.5 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-500 badge-pulse';
+      if (mDot) mDot.className = 'w-3 h-3 rounded-full bg-emerald-500 badge-pulse';
+      if (badgeText) badgeText.innerText = 'WhatsApp Conectado';
+      if (modalStatus) modalStatus.innerText = 'Pronto para enviar e receber mensagens.';
+      if (mStatus) mStatus.innerText = 'Conectado e operacional';
+      [connectedView, mConnectedView].forEach(el => el?.classList.remove('hidden'));
+      const phone = this.whatsappStatus.phoneNumber || 'Ativo';
+      if (connectedPhone) connectedPhone.innerText = phone;
+      if (mConnectedPhone) mConnectedPhone.innerText = phone;
     } else if (this.whatsappStatus.status === 'SCAN_QR') {
-      badgeDot.className = 'w-2 h-2 rounded-full bg-amber-500 badge-pulse';
-      badgeText.innerText = 'Escanear QR Code';
-      modalStatus.innerText = 'Conecte seu WhatsApp lendo o QR Code abaixo:';
-      qrView.classList.remove('hidden');
+      if (badgeDot) badgeDot.className = 'w-2 h-2 rounded-full bg-amber-500 badge-pulse shrink-0';
+      if (tabDot) tabDot.className = 'absolute -top-0.5 -right-1 w-2.5 h-2.5 rounded-full bg-amber-500 badge-pulse';
+      if (mDot) mDot.className = 'w-3 h-3 rounded-full bg-amber-500 badge-pulse';
+      if (badgeText) badgeText.innerText = 'Escanear QR Code';
+      if (modalStatus) modalStatus.innerText = 'Conecte seu WhatsApp lendo o QR Code abaixo:';
+      if (mStatus) mStatus.innerText = 'Aguardando leitura do QR Code';
+      [qrView, mQrView].forEach(el => el?.classList.remove('hidden'));
       if (this.whatsappStatus.qrCode) {
-        qrImg.src = this.whatsappStatus.qrCode;
+        if (qrImg) qrImg.src = this.whatsappStatus.qrCode;
+        if (mQrImg) mQrImg.src = this.whatsappStatus.qrCode;
       }
     } else if (this.whatsappStatus.status === 'CONNECTING') {
-      badgeDot.className = 'w-2 h-2 rounded-full bg-indigo-500 badge-pulse';
-      badgeText.innerText = 'Conectando...';
-      modalStatus.innerText = 'Estabelecendo conexão segura...';
-      loader.classList.remove('hidden');
+      if (badgeDot) badgeDot.className = 'w-2 h-2 rounded-full bg-indigo-500 badge-pulse shrink-0';
+      if (tabDot) tabDot.className = 'absolute -top-0.5 -right-1 w-2.5 h-2.5 rounded-full bg-indigo-500 badge-pulse';
+      if (mDot) mDot.className = 'w-3 h-3 rounded-full bg-indigo-500 badge-pulse';
+      if (badgeText) badgeText.innerText = 'Conectando...';
+      if (modalStatus) modalStatus.innerText = 'Estabelecendo conexão segura...';
+      if (mStatus) mStatus.innerText = 'Conectando ao WhatsApp...';
+      [loader, mLoader].forEach(el => el?.classList.remove('hidden'));
     } else {
-      badgeDot.className = 'w-2 h-2 rounded-full bg-rose-500';
-      badgeText.innerText = 'Desconectado';
-      modalStatus.innerText = 'Clique para reiniciar a conexão e gerar QR Code.';
-      loader.classList.remove('hidden');
+      if (badgeDot) badgeDot.className = 'w-2 h-2 rounded-full bg-rose-500 shrink-0';
+      if (tabDot) tabDot.className = 'absolute -top-0.5 -right-1 w-2.5 h-2.5 rounded-full bg-rose-500';
+      if (mDot) mDot.className = 'w-3 h-3 rounded-full bg-rose-500';
+      if (badgeText) badgeText.innerText = 'Desconectado';
+      if (modalStatus) modalStatus.innerText = 'Clique para reiniciar a conexão e gerar QR Code.';
+      if (mStatus) mStatus.innerText = 'WhatsApp Desconectado';
+      [loader, mLoader].forEach(el => el?.classList.remove('hidden'));
     }
+
+    if (window.lucide) lucide.createIcons();
   },
 
   async actionWhatsApp(action) {
@@ -418,46 +516,73 @@ const app = {
     const qrImg = document.getElementById('ngrok-qr-img');
     const errorMsg = document.getElementById('ngrok-error-msg');
 
-    if (!dot || !text) return;
+    // Elementos Mobile
+    const mText = document.getElementById('m-ngrok-status-text');
+    const mDot = document.getElementById('m-ngrok-status-dot');
+    const mActiveView = document.getElementById('m-ngrok-active-view');
+    const mMissingView = document.getElementById('m-ngrok-missing-view');
+    const mUrlInput = document.getElementById('m-ngrok-url-input');
+    const mQrImg = document.getElementById('m-ngrok-qr-img');
 
     activeView?.classList.add('hidden');
     missingView?.classList.add('hidden');
     errorView?.classList.add('hidden');
+    mActiveView?.classList.add('hidden');
+    mMissingView?.classList.add('hidden');
 
     const status = this.ngrokStatus.status;
 
     if (status === 'CONNECTED' && this.ngrokStatus.url) {
-      dot.className = 'w-2 h-2 rounded-full bg-emerald-500 badge-pulse';
-      text.innerText = 'Online (Ngrok)';
+      if (dot) dot.className = 'w-2 h-2 rounded-full bg-emerald-500 badge-pulse shrink-0';
+      if (mDot) mDot.className = 'w-3 h-3 rounded-full bg-emerald-500 badge-pulse';
+      if (text) text.innerText = 'Online (Ngrok)';
+      if (mText) mText.innerText = 'Túnel ativo e acessível';
       if (modalStatus) modalStatus.innerText = 'Túnel ativo! O sistema pode ser acessado de qualquer lugar pela internet.';
       if (activeView) activeView.classList.remove('hidden');
+      if (mActiveView) mActiveView.classList.remove('hidden');
       if (urlInput) urlInput.value = this.ngrokStatus.url;
+      if (mUrlInput) mUrlInput.value = this.ngrokStatus.url;
       if (openLink) openLink.href = this.ngrokStatus.url;
-      if (qrImg) qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(this.ngrokStatus.url)}`;
+      const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(this.ngrokStatus.url)}`;
+      if (qrImg) qrImg.src = qrSrc;
+      if (mQrImg) mQrImg.src = qrSrc;
     } else if (status === 'CONNECTING') {
-      dot.className = 'w-2 h-2 rounded-full bg-indigo-500 badge-pulse';
-      text.innerText = 'Conectando...';
+      if (dot) dot.className = 'w-2 h-2 rounded-full bg-indigo-500 badge-pulse shrink-0';
+      if (mDot) mDot.className = 'w-3 h-3 rounded-full bg-indigo-500 badge-pulse';
+      if (text) text.innerText = 'Conectando...';
+      if (mText) mText.innerText = 'Estabelecendo túnel...';
       if (modalStatus) modalStatus.innerText = 'Estabelecendo túnel com o servidor Ngrok...';
     } else if (status === 'MISSING_TOKEN') {
-      dot.className = 'w-2 h-2 rounded-full bg-amber-500';
-      text.innerText = 'Ngrok: Sem Token';
+      if (dot) dot.className = 'w-2 h-2 rounded-full bg-amber-500 shrink-0';
+      if (mDot) mDot.className = 'w-3 h-3 rounded-full bg-amber-500';
+      if (text) text.innerText = 'Ngrok: Sem Token';
+      if (mText) mText.innerText = 'Authtoken não informado';
       if (modalStatus) modalStatus.innerText = 'Authtoken não informado. Configure nas preferências ao lado.';
       if (missingView) missingView.classList.remove('hidden');
+      if (mMissingView) mMissingView.classList.remove('hidden');
     } else if (status === 'DISABLED') {
-      dot.className = 'w-2 h-2 rounded-full bg-slate-500';
-      text.innerText = 'Ngrok Desativado';
+      if (dot) dot.className = 'w-2 h-2 rounded-full bg-slate-500 shrink-0';
+      if (mDot) mDot.className = 'w-3 h-3 rounded-full bg-slate-500';
+      if (text) text.innerText = 'Ngrok Desativado';
+      if (mText) mText.innerText = 'Desativado nas preferências';
       if (modalStatus) modalStatus.innerText = 'O túnel está desativado nas preferências.';
     } else if (status === 'ERROR') {
-      dot.className = 'w-2 h-2 rounded-full bg-rose-500';
-      text.innerText = 'Ngrok: Erro';
+      if (dot) dot.className = 'w-2 h-2 rounded-full bg-rose-500 shrink-0';
+      if (mDot) mDot.className = 'w-3 h-3 rounded-full bg-rose-500';
+      if (text) text.innerText = 'Ngrok: Erro';
+      if (mText) mText.innerText = 'Erro ao conectar';
       if (modalStatus) modalStatus.innerText = 'Ocorreu uma falha ao iniciar o túnel Ngrok.';
       if (errorView) errorView.classList.remove('hidden');
       if (errorMsg) errorMsg.textContent = this.ngrokStatus.error || 'Erro desconhecido.';
     } else {
-      dot.className = 'w-2 h-2 rounded-full bg-slate-500';
-      text.innerText = 'Ngrok';
+      if (dot) dot.className = 'w-2 h-2 rounded-full bg-slate-500 shrink-0';
+      if (mDot) mDot.className = 'w-3 h-3 rounded-full bg-slate-500';
+      if (text) text.innerText = 'Ngrok';
+      if (mText) mText.innerText = 'Túnel desconectado';
       if (modalStatus) modalStatus.innerText = 'Túnel desconectado.';
     }
+
+    if (window.lucide) lucide.createIcons();
   },
 
   async copyNgrokUrl() {
@@ -614,36 +739,45 @@ const app = {
     const loading = document.getElementById('schedules-loading');
     const empty = document.getElementById('schedules-empty');
     const list = document.getElementById('schedules-list');
+    const badge = document.getElementById('tab-badge-schedules');
 
     try {
       const res = await this.apiFetch('/api/schedules');
       const data = await res.json();
-      loading.classList.add('hidden');
+      loading?.classList.add('hidden');
 
       if (!data.success || !data.schedules || data.schedules.length === 0) {
-        empty.classList.remove('hidden');
-        list.innerHTML = '';
+        empty?.classList.remove('hidden');
+        if (list) list.innerHTML = '';
+        if (badge) badge.classList.add('hidden');
         return;
       }
 
-      empty.classList.add('hidden');
+      empty?.classList.add('hidden');
       this.schedules = data.schedules;
+
+      if (badge) {
+        badge.textContent = data.schedules.length;
+        badge.classList.remove('hidden');
+      }
+
       this.renderSchedules();
     } catch (err) {
-      loading.classList.add('hidden');
+      loading?.classList.add('hidden');
       this.showAlert(`Erro ao carregar cronogramas: ${err.message}`, 'error');
     }
   },
 
   renderSchedules() {
     const list = document.getElementById('schedules-list');
+    if (!list) return;
     list.innerHTML = '';
 
     const dayNames = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
 
     this.schedules.forEach(schedule => {
       const card = document.createElement('div');
-      card.className = 'glass-card glass-card-hover rounded-2xl p-6 transition';
+      card.className = 'glass-card glass-card-hover rounded-2xl p-4 sm:p-6 transition shadow-md';
 
       const recurrenceLabel = schedule.recurrence === 'DAILY' ? 'Diário' :
         schedule.recurrence === 'WEEKLY' ? `Semanal (${dayNames[schedule.day_of_week] || 'Dia'})` : 'Único';
@@ -655,41 +789,43 @@ const app = {
       if (schedule.items && schedule.items.length > 0) {
         itemsHtml = `
           <div class="mt-4 border-t border-slate-700/50 pt-4">
-            <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Momentos do Culto (${schedule.items.length})</h4>
+            <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center justify-between">
+              <span>Momentos do Culto (${schedule.items.length})</span>
+            </h4>
             <div class="space-y-2">
         `;
 
         schedule.items.forEach(item => {
           let statusBadge = '';
           if (item.is_immutable) {
-            statusBadge = '<span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/30">🔒 Fixo / Imutável</span>';
+            statusBadge = '<span class="px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/30 shrink-0">🔒 Fixo</span>';
           } else if (item.is_filled) {
-            statusBadge = '<span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">✓ Preenchido</span>';
+            statusBadge = '<span class="px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shrink-0">✓ Preenchido</span>';
           } else {
-            statusBadge = '<span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30">⏳ Pendente</span>';
+            statusBadge = '<span class="px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0">⏳ Pendente</span>';
           }
 
           const contentDisplay = item.content ?
-            `<span class="text-slate-200 font-medium">${item.content}</span>` :
+            `<span class="text-slate-200 font-medium break-words">${item.content}</span>` :
             `<span class="text-slate-500 italic">Aguardando envio do responsável...</span>`;
 
           const responsibleDisplay = item.responsible_name ?
-            `<span class="text-xs text-slate-400">👤 ${item.responsible_name} ${item.responsible_phone ? `(${item.responsible_phone})` : ''}</span>` :
+            `<span class="text-xs text-slate-400 flex items-center gap-1 sm:justify-end"><span>👤 ${item.responsible_name}</span>${item.responsible_phone ? `<span class="text-indigo-400/80 font-mono text-[11px]">(${item.responsible_phone})</span>` : ''}</span>` :
             '';
 
           itemsHtml += `
-            <div class="bg-slate-800/60 rounded-xl p-3 flex flex-col md:flex-row md:items-center justify-between gap-2 border border-slate-700/40">
-              <div class="flex items-start md:items-center gap-3">
-                <span class="text-xs font-mono font-bold bg-slate-900 px-2 py-1 rounded text-indigo-400 border border-slate-700">${item.item_time}</span>
-                <div>
-                  <div class="flex items-center gap-2">
+            <div class="bg-slate-800/60 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border border-slate-700/40">
+              <div class="flex items-start sm:items-center gap-2.5 min-w-0">
+                <span class="text-xs font-mono font-bold bg-slate-900 px-2 py-1 rounded text-indigo-400 border border-slate-700 shrink-0">${item.item_time}</span>
+                <div class="min-w-0 flex-1">
+                  <div class="flex flex-wrap items-center gap-1.5">
                     <span class="font-semibold text-sm text-white">${item.name}</span>
                     ${statusBadge}
                   </div>
                   <div class="text-xs mt-0.5">${contentDisplay}</div>
                 </div>
               </div>
-              <div class="text-right">
+              <div class="sm:text-right shrink-0">
                 ${responsibleDisplay}
               </div>
             </div>
@@ -706,32 +842,40 @@ const app = {
       }
 
       card.innerHTML = `
-        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <div class="flex items-center gap-3">
-              <h3 class="text-xl font-bold text-white">${schedule.title}</h3>
-              <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">${recurrenceLabel}</span>
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div class="min-w-0">
+            <div class="flex flex-wrap items-center gap-2">
+              <h3 class="text-lg sm:text-xl font-bold text-white break-words">${schedule.title}</h3>
+              <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shrink-0">${recurrenceLabel}</span>
             </div>
-            <div class="flex items-center gap-4 mt-2 text-xs text-slate-400">
-              <span>📅 Próximo: <strong class="text-slate-200">${formattedDate}</strong></span>
-              <span>⏰ Início: <strong class="text-slate-200">${schedule.event_time}</strong></span>
+            <div class="flex flex-wrap items-center gap-3 sm:gap-4 mt-1.5 text-xs text-slate-400">
+              <span class="flex items-center gap-1">📅 Próximo: <strong class="text-slate-200">${formattedDate}</strong></span>
+              <span class="flex items-center gap-1">⏰ Início: <strong class="text-slate-200">${schedule.event_time}</strong></span>
             </div>
           </div>
+        </div>
 
-          <div class="flex flex-wrap items-center gap-2">
-            <button onclick="app.sendToSonoplastaNow(${schedule.id})" title="Enviar cronograma ao Sonoplasta agora" class="bg-slate-800 hover:bg-slate-700 text-indigo-400 hover:text-indigo-300 px-3 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 border border-slate-700 active:scale-95">
-              <i data-lucide="send" class="w-3.5 h-3.5"></i> Enviar p/ Sonoplasta
-            </button>
-            <button onclick="app.remindNow(${schedule.id})" title="Disparar lembretes para os responsáveis agora" class="bg-slate-800 hover:bg-slate-700 text-amber-400 hover:text-amber-300 px-3 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 border border-slate-700 active:scale-95">
-              <i data-lucide="bell" class="w-3.5 h-3.5"></i> Lembrar Agora
-            </button>
-            <button onclick="app.editSchedule(${schedule.id})" title="Editar cronograma" class="bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white p-2 rounded-xl text-xs transition border border-slate-700 active:scale-95">
-              <i data-lucide="edit-3" class="w-4 h-4"></i>
-            </button>
-            <button onclick="app.deleteSchedule(${schedule.id})" title="Excluir cronograma" class="bg-slate-800 hover:bg-rose-500/20 text-rose-400 p-2 rounded-xl text-xs transition border border-slate-700 active:scale-95">
-              <i data-lucide="trash-2" class="w-4 h-4"></i>
-            </button>
-          </div>
+        <!-- Botões de Ação Responsivos (Grid 2x2 no mobile, Flex no desktop) -->
+        <div class="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 mt-4 pt-3 border-t border-slate-700/40">
+          <button onclick="app.sendToSonoplastaNow(${schedule.id})" title="Enviar cronograma ao Sonoplasta agora" class="bg-indigo-600/15 hover:bg-indigo-600/25 text-indigo-300 border border-indigo-500/30 px-3 py-2.5 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 active:scale-95 shadow-sm">
+            <i data-lucide="send" class="w-3.5 h-3.5 shrink-0"></i>
+            <span class="truncate">Enviar Sonoplasta</span>
+          </button>
+
+          <button onclick="app.remindNow(${schedule.id})" title="Disparar lembretes para os responsáveis agora" class="bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 px-3 py-2.5 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 active:scale-95 shadow-sm">
+            <i data-lucide="bell" class="w-3.5 h-3.5 shrink-0"></i>
+            <span class="truncate">Lembrar Agora</span>
+          </button>
+
+          <button onclick="app.editSchedule(${schedule.id})" title="Editar cronograma" class="bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-3 py-2.5 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 border border-slate-700 active:scale-95">
+            <i data-lucide="edit-3" class="w-3.5 h-3.5 shrink-0"></i>
+            <span>Editar</span>
+          </button>
+
+          <button onclick="app.deleteSchedule(${schedule.id})" title="Excluir cronograma" class="bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 px-3 py-2.5 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 border border-rose-500/30 active:scale-95">
+            <i data-lucide="trash-2" class="w-3.5 h-3.5 shrink-0"></i>
+            <span>Excluir</span>
+          </button>
         </div>
 
         ${itemsHtml}
@@ -740,7 +884,7 @@ const app = {
       list.appendChild(card);
     });
 
-    lucide.createIcons();
+    if (window.lucide) lucide.createIcons();
   },
 
   async sendToSonoplastaNow(scheduleId) {
@@ -817,7 +961,7 @@ const app = {
       document.getElementById('sched_day_of_week').value = '3'; // Quarta-feira padrão
       document.getElementById('sched_time').value = '19:30';
 
-      // Adiciona itens padrão para agilizar
+      // Adiciona momentos padrão para agilizar o preenchimento
       this.addScheduleItem({ item_time: '19:30', name: 'Hino Inicial', is_immutable: false });
       this.addScheduleItem({ item_time: '19:45', name: 'Oração Inicial', is_immutable: true, content: 'Oração de Abertura' });
       this.addScheduleItem({ item_time: '20:00', name: 'Louvor Congregacional', is_immutable: false });
@@ -826,7 +970,7 @@ const app = {
 
     this.toggleDayOfWeek();
     this.showModal('schedule-modal');
-    lucide.createIcons();
+    if (window.lucide) lucide.createIcons();
   },
 
   editSchedule(scheduleId) {
@@ -842,23 +986,27 @@ const app = {
     const dateContainer = document.getElementById('sched_date_container');
 
     if (rec === 'WEEKLY') {
-      dowContainer.classList.remove('hidden');
-      dateContainer.classList.add('hidden');
+      dowContainer?.classList.remove('hidden');
+      dateContainer?.classList.add('hidden');
     } else if (rec === 'ONCE') {
-      dowContainer.classList.add('hidden');
-      dateContainer.classList.remove('hidden');
+      dowContainer?.classList.add('hidden');
+      dateContainer?.classList.remove('hidden');
     } else {
-      dowContainer.classList.add('hidden');
-      dateContainer.classList.add('hidden');
+      dowContainer?.classList.add('hidden');
+      dateContainer?.classList.add('hidden');
     }
   },
 
   addScheduleItem(item = null) {
     const container = document.getElementById('schedule-items-container');
+    if (!container) return;
     const row = document.createElement('div');
-    row.className = 'item-row p-4 lg:grid lg:grid-cols-12 gap-3 items-center bg-slate-900/30 hover:bg-slate-800/40 transition space-y-3 lg:space-y-0';
+    const itemIndex = container.children.length + 1;
 
-    const time = item?.item_time || document.getElementById('sched_time').value || '19:30';
+    // Estrutura Híbrida: Card no Mobile/Tablet (< lg) e Linha de Tabela no Desktop (lg:)
+    row.className = 'item-row p-3.5 sm:p-4 rounded-xl bg-slate-900/80 lg:bg-transparent lg:p-3 lg:grid lg:grid-cols-12 lg:gap-3 lg:items-center border border-slate-700/60 lg:border-none lg:border-b lg:border-slate-800/40 hover:bg-slate-800/40 transition space-y-3 lg:space-y-0';
+
+    const time = item?.item_time || document.getElementById('sched_time')?.value || '19:30';
     const name = item?.name || '';
     const respName = item?.responsible_name || '';
     const respPhone = item?.responsible_phone || '';
@@ -866,46 +1014,86 @@ const app = {
     const content = item?.content || '';
 
     row.innerHTML = `
+      <!-- Cabeçalho do Card Mobile -->
+      <div class="flex items-center justify-between lg:hidden pb-2.5 border-b border-slate-700/50">
+        <div class="flex items-center gap-2">
+          <span class="item-badge text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">Momento #${itemIndex}</span>
+        </div>
+        <button type="button" onclick="app.removeScheduleItem(this)" class="text-rose-400 hover:text-rose-300 p-1.5 rounded-lg hover:bg-rose-500/20 transition flex items-center gap-1 text-xs font-semibold" title="Remover momento">
+          <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> <span>Remover</span>
+        </button>
+      </div>
+
+      <!-- Campo Horário -->
       <div class="col-span-1">
-        <input type="time" value="${time}" class="item-time w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:ring-1 focus:ring-indigo-500 font-mono [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert">
+        <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1 lg:hidden">Horário (HH:MM)</label>
+        <input type="time" value="${time}" class="item-time w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 lg:py-1.5 text-xs text-white outline-none focus:ring-1 focus:ring-indigo-500 font-mono [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert">
       </div>
 
+      <!-- Campo Nome / Momento -->
       <div class="col-span-3">
-        <input type="text" value="${name}" placeholder="Ex: Hino Inicial" required class="item-name w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white outline-none focus:ring-1 focus:ring-indigo-500 font-medium">
+        <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1 lg:hidden">Nome do Momento *</label>
+        <input type="text" value="${name}" placeholder="Ex: Hino Inicial" required class="item-name w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 lg:py-1.5 text-xs text-white outline-none focus:ring-1 focus:ring-indigo-500 font-medium">
       </div>
 
-      <div class="col-span-2">
-        <input type="text" value="${respName}" placeholder="Ex: Irmã Rosana" class="item-resp-name w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white outline-none focus:ring-1 focus:ring-indigo-500">
+      <!-- Subgrid Mobile para Responsável e Telefone -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:contents gap-2.5 sm:gap-3">
+        <div class="col-span-2">
+          <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1 lg:hidden">Responsável</label>
+          <input type="text" value="${respName}" placeholder="Ex: Irmã Rosana" class="item-resp-name w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 lg:py-1.5 text-xs text-white outline-none focus:ring-1 focus:ring-indigo-500">
+        </div>
+
+        <div class="col-span-2">
+          <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1 lg:hidden">WhatsApp (com DDD)</label>
+          <input type="text" value="${respPhone}" placeholder="Ex: 5511999998888" class="item-resp-phone w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 lg:py-1.5 text-xs text-white outline-none focus:ring-1 focus:ring-indigo-500 font-mono">
+        </div>
       </div>
 
-      <div class="col-span-2">
-        <input type="text" value="${respPhone}" placeholder="Ex: 5511999998888" class="item-resp-phone w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white outline-none focus:ring-1 focus:ring-indigo-500 font-mono">
-      </div>
-
+      <!-- Campo Fixo / Imutável & Conteúdo -->
       <div class="col-span-3 space-y-1.5">
-        <label class="flex items-center gap-1.5 text-[11px] text-slate-300 font-medium cursor-pointer">
+        <label class="flex items-center gap-2 text-xs text-slate-300 font-medium cursor-pointer p-1 rounded hover:bg-slate-800/40 transition">
           <input type="checkbox" ${isImmutable ? 'checked' : ''} onchange="app.toggleItemImmutable(this)" class="item-immutable rounded bg-slate-900 border-slate-700 text-purple-600 focus:ring-0">
-          <span>Item Imutável (Conteúdo Fixo)</span>
+          <span class="text-[11px] sm:text-xs">Item Imutável (Conteúdo Fixo)</span>
         </label>
-        <input type="text" value="${content}" placeholder="${isImmutable ? 'Conteúdo fixo (ex: Oração)' : 'Conteúdo / Louvor / Link'}" class="item-content w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white outline-none focus:ring-1 focus:ring-purple-500">
+        <input type="text" value="${content}" placeholder="${isImmutable ? 'Conteúdo fixo permanente (ex: Oração)' : 'Conteúdo / Louvor / Link'}" class="item-content w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 lg:py-1.5 text-xs text-white outline-none focus:ring-1 focus:ring-purple-500">
       </div>
 
-      <div class="col-span-1 text-center">
-        <button type="button" onclick="this.closest('.item-row').remove()" class="text-rose-400 hover:text-rose-300 p-1.5 rounded-lg hover:bg-rose-500/10 transition" title="Remover momento">
-          <i data-lucide="trash" class="w-4 h-4 mx-auto"></i>
+      <!-- Botão Remover no Desktop -->
+      <div class="col-span-1 hidden lg:flex justify-center">
+        <button type="button" onclick="app.removeScheduleItem(this)" class="text-rose-400 hover:text-rose-300 p-1.5 rounded-lg hover:bg-rose-500/10 transition" title="Remover momento">
+          <i data-lucide="trash" class="w-4 h-4"></i>
         </button>
       </div>
     `;
 
     container.appendChild(row);
-    lucide.createIcons();
+    this.updateScheduleItemBadges();
+    if (window.lucide) lucide.createIcons();
+  },
+
+  removeScheduleItem(button) {
+    const row = button.closest('.item-row');
+    if (row) {
+      row.remove();
+      this.updateScheduleItemBadges();
+    }
+  },
+
+  updateScheduleItemBadges() {
+    const rows = document.querySelectorAll('#schedule-items-container .item-row');
+    rows.forEach((row, idx) => {
+      const badge = row.querySelector('.item-badge');
+      if (badge) {
+        badge.textContent = `Momento #${idx + 1}`;
+      }
+    });
   },
 
   toggleItemImmutable(checkbox) {
     const row = checkbox.closest('.item-row');
     const contentInput = row.querySelector('.item-content');
     if (checkbox.checked) {
-      contentInput.placeholder = 'Digite o conteúdo fixo permanente deste item';
+      contentInput.placeholder = 'Conteúdo fixo permanente (ex: Oração)';
     } else {
       contentInput.placeholder = 'Conteúdo preenchido pelo bot ou manual';
     }
@@ -920,7 +1108,7 @@ const app = {
     const day_of_week = recurrence === 'WEEKLY' ? parseInt(document.getElementById('sched_day_of_week').value, 10) : null;
     const next_run_date = recurrence === 'ONCE' ? document.getElementById('sched_date').value : null;
 
-    // Coleta os itens da tabela
+    // Coleta os itens da tabela/cards
     const rows = document.querySelectorAll('#schedule-items-container .item-row');
     const items = [];
 
@@ -980,12 +1168,13 @@ const app = {
 
   async loadLogs() {
     const container = document.getElementById('logs-container');
+    if (!container) return;
     try {
       const res = await this.apiFetch('/api/logs');
       const data = await res.json();
       if (data.success && data.logs) {
         if (data.logs.length === 0) {
-          container.innerHTML = '<div class="text-slate-500">Nenhum evento registrado ainda.</div>';
+          container.innerHTML = '<div class="text-slate-500 py-4 text-center">Nenhum evento registrado ainda.</div>';
           return;
         }
 
@@ -999,7 +1188,7 @@ const app = {
           const time = log.timestamp ? log.timestamp.split(' ')[1] || log.timestamp : '';
 
           return `
-            <div class="leading-relaxed border-b border-slate-800/40 pb-1">
+            <div class="leading-relaxed border-b border-slate-800/40 pb-1 break-words">
               <span class="text-slate-500">[${time}]</span>
               <span class="${color} font-bold">[${log.level}]</span>
               <span class="text-slate-300">${log.message}</span>
