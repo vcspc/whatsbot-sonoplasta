@@ -12,11 +12,11 @@ Bot inteligente de WhatsApp construído com **@whiskeysockets/baileys**, **Googl
    - Definição de **Itens Imutáveis / Fixos**: momentos que possuem conteúdo pré-definido permanente (ex: "Oração de Abertura") e que o bot não precisa solicitar a ninguém.
    - Visualização em tempo real do QR Code do WhatsApp para conexão direta no navegador.
    - Configuração do telefone do Sonoplasta e chave da API do Gemini.
-   - Botões de teste para envio imediato do cronograma formatado e disparo manual de lembretes.
+   - Envio imediato do cronograma ao Sonoplasta e seleção dos momentos para **Lembrar Agora**: marque apenas os momentos desejados e clique no botão do cronograma. O lembrete inclui somente os selecionados e é enviado apenas aos telefones dos respectivos responsáveis; momentos fixos ou sem telefone não podem ser selecionados.
 
 2. **Lembretes Automáticos na Véspera**:
    - O bot identifica os cronogramas que acontecerão no dia seguinte.
-   - Envia automaticamente mensagens no WhatsApp para cada responsável lembrando do culto e solicitando o que será tocado/apresentado.
+   - Envia automaticamente mensagens no WhatsApp para cada responsável lembrando do culto e solicitando o que será tocado/apresentado. Após iniciar um envio manual para o cronograma, o automático não envia lembretes aos outros momentos da mesma data.
 
 3. **Inteligência Artificial (Google Gemini) com Contexto e Histórico**:
    - Interpreta respostas enviadas em linguagem natural pelos responsáveis (ex: *"Oi, o hino inicial vai ser Harpa 15 e o final vai ser o 120"*).
@@ -80,6 +80,10 @@ npm run dev
 
 Abra o navegador em: **`http://localhost:3000`**
 
+### Seleção de lembretes via API
+
+`POST /api/schedules/:id/remind-now` exige autenticação e um corpo JSON com os IDs dos momentos selecionados, por exemplo `{"item_ids":[12,15]}`. A lista não pode estar vazia e todos os IDs precisam pertencer ao cronograma e corresponder a momentos mutáveis com telefone cadastrado. O servidor agrupa os momentos selecionados por telefone, envia uma mensagem para cada número e registra o sucesso por momento e data. Ao iniciar um envio manual, o lembrete automático dos outros momentos é suspenso até a próxima ocorrência do cronograma; ainda é possível selecionar e lembrar esses outros momentos manualmente.
+
 ---
 
 ## 📱 Conectando o WhatsApp
@@ -113,6 +117,7 @@ whatsbot-soplasta/
 │   │   ├── gemini.js             # Integração com IA Gemini e interpretação de intenções
 │   │   ├── playwright.js         # Scraper headless Playwright para YouTube
 │   │   ├── scheduleManager.js    # CRUD, regras de negócios e renovação de cronogramas
+│   │   ├── reminders.js          # Seleção, envio e controle de lembretes por momento
 │   │   └── scheduler.js          # Agendador Cron (lembretes véspera e envio 1h antes)
 │   ├── utils/
 │   │   ├── debouncer.js          # Buffer de 10s e reset de histórico de 30min

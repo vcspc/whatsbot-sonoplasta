@@ -796,6 +796,8 @@ const app = {
         `;
 
         schedule.items.forEach(item => {
+          const canRemind = !item.is_immutable && Boolean(item.responsible_phone);
+          const reminderLabel = `Selecionar momento ${Number(item.item_order)} para lembrete`;
           let statusBadge = '';
           if (item.is_immutable) {
             statusBadge = '<span class="px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/30 shrink-0">🔒 Fixo</span>';
@@ -816,6 +818,7 @@ const app = {
           itemsHtml += `
             <div class="bg-slate-800/60 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border border-slate-700/40">
               <div class="flex items-start sm:items-center gap-2.5 min-w-0">
+                ${canRemind ? `<input type="checkbox" class="reminder-item shrink-0 w-4 h-4 mt-1 sm:mt-0 accent-amber-500 cursor-pointer" value="${item.id}" aria-label="${reminderLabel}" title="${reminderLabel}">` : ''}
                 <span class="text-xs font-mono font-bold bg-slate-900 px-2 py-1 rounded text-indigo-400 border border-slate-700 shrink-0">${item.item_time}</span>
                 <div class="min-w-0 flex-1">
                   <div class="flex flex-wrap items-center gap-1.5">
@@ -862,7 +865,7 @@ const app = {
             <span class="truncate">Enviar Sonoplasta</span>
           </button>
 
-          <button onclick="app.remindNow(${schedule.id})" title="Disparar lembretes para os responsáveis agora" class="bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 px-3 py-2.5 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 active:scale-95 shadow-sm">
+          <button onclick="app.remindNow(${schedule.id}, this)" title="Enviar lembrete somente dos momentos selecionados" class="bg-amber-500/15 hover:bg-amber-500/25 disabled:opacity-50 disabled:cursor-wait text-amber-300 border border-amber-500/30 px-3 py-2.5 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 active:scale-95 shadow-sm">
             <i data-lucide="bell" class="w-3.5 h-3.5 shrink-0"></i>
             <span class="truncate">Lembrar Agora</span>
           </button>
@@ -878,6 +881,7 @@ const app = {
           </button>
         </div>
 
+        ${schedule.items?.some(item => !item.is_immutable && item.responsible_phone) ? '<p class="mt-4 text-xs text-amber-200/80">Marque os momentos que deseja lembrar; somente os responsáveis pelos selecionados receberão mensagem.</p>' : ''}
         ${itemsHtml}
       `;
 
@@ -902,18 +906,37 @@ const app = {
     }
   },
 
-  async remindNow(scheduleId) {
+  async remindNow(scheduleId, button) {
+    if (button.disabled) return;
+    const card = button.closest('.glass-card');
+    const selected = [...card.querySelectorAll('.reminder-item:checked')];
+    if (selected.length === 0) {
+      this.showAlert('Selecione ao menos um momento com responsável para enviar o lembrete.', 'error');
+      return;
+    }
+
+    const item_ids = selected.map(input => Number(input.value));
+    button.disabled = true;
     try {
       this.showAlert('Disparando lembretes via WhatsApp...', 'info');
-      const res = await this.apiFetch(`/api/schedules/${scheduleId}/remind-now`, { method: 'POST' });
+      const res = await this.apiFetch(`/api/schedules/${scheduleId}/remind-now`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item_ids })
+      });
       const data = await res.json();
       if (data.success) {
+        selected.forEach(input => { input.checked = false; });
         this.showAlert(data.message, 'success');
       } else {
+        const sentIds = new Set(data.sent_item_ids || []);
+        selected.forEach(input => { if (sentIds.has(Number(input.value))) input.checked = false; });
         this.showAlert(data.error, 'error');
       }
     } catch (err) {
       this.showAlert(`Erro: ${err.message}`, 'error');
+    } finally {
+      button.disabled = false;
     }
   },
 

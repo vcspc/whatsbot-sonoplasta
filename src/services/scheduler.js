@@ -1,7 +1,8 @@
 import cron from 'node-cron';
 import { db, logMessage, getSetting } from '../config/database.js';
 import { getAllSchedules, renewCompletedSchedules } from './scheduleManager.js';
-import { formatScheduleForWhatsApp, formatReminderMessage } from '../utils/formatter.js';
+import { formatScheduleForWhatsApp } from '../utils/formatter.js';
+import { getUnsentReminderItems, sendReminderMessages, markReminderItemsSent, suppressAutomaticForPreviousManualReminders } from './reminders.js';
 import { sendWhatsAppMessage } from './baileys.js';
 import {
   getZonedParts,
@@ -17,6 +18,7 @@ let cronJob = null;
  * Inicia os agendamentos automáticos do sistema.
  */
 export function initScheduler() {
+  suppressAutomaticForPreviousManualReminders(db);
   logMessage('INFO', '[Scheduler] Inicializando agendador de tarefas periódicas...');
 
   // Executa a cada minuto para verificar lembretes da véspera, alertas de 1h antes e renovações
@@ -65,32 +67,18 @@ export async function checkEveReminders() {
     if (schedule.next_run_date === tomorrowStr && !schedule.reminder_sent) {
       logMessage('INFO', `[Scheduler] Disparando lembretes da véspera (horário configurado: ${reminderTime}, fuso: ${tz}) para o cronograma: "${schedule.title}" (${schedule.next_run_date})`);
 
-      // Agrupa os itens pendentes mutáveis por telefone do responsável
-      const itemsByPhone = new Map();
-
-      for (const item of schedule.items) {
-        if (item.is_immutable) continue; // Pula itens imutáveis
-        if (!item.responsible_phone) continue;
-
-        const phone = item.responsible_phone;
-        if (!itemsByPhone.has(phone)) {
-          itemsByPhone.set(phone, {
-            name: item.responsible_name || 'Irmão(ã)',
-            items: []
-          });
-        }
-        itemsByPhone.get(phone).items.push(item);
+      const items = getUnsentReminderItems(schedule);
+      if (items.length === 0) {
+        markReminderItemsSent(db, schedule, []);
+        continue;
       }
 
-      // Envia a mensagem padrão de lembrete para cada responsável
-      for (const [phone, data] of itemsByPhone.entries()) {
-        const message = formatReminderMessage(data.name, schedule, data.items);
-        await sendWhatsAppMessage(phone, message);
-      }
-
-      // Marca o cronograma como lembrete enviado
-      db.prepare('UPDATE schedules SET reminder_sent = 1 WHERE id = ?').run(schedule.id);
-      logMessage('INFO', `[Scheduler] Lembretes da véspera concluídos para o cronograma ID ${schedule.id}`);
+      const { sentItems, sentCount, totalCount } = await sendReminderMessages(
+        schedule, items, sendWhatsAppMessage,
+        () => !db.prepare('SELECT reminder_sent FROM schedules WHERE id = ?').get(schedule.id)?.reminder_sent
+      );
+      if (sentItems.length > 0) markReminderItemsSent(db, schedule, sentItems);
+      logMessage('INFO', `[Scheduler] Lembretes da véspera enviados para ${sentCount} de ${totalCount} responsável(is) do cronograma ID ${schedule.id}`);
     }
   }
 }

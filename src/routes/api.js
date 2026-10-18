@@ -8,7 +8,8 @@ import {
   updateScheduleItemContent
 } from '../services/scheduleManager.js';
 import { getSetting, setSetting, db } from '../config/database.js';
-import { formatScheduleForWhatsApp, formatReminderMessage } from '../utils/formatter.js';
+import { formatScheduleForWhatsApp } from '../utils/formatter.js';
+import { selectReminderItems, sendReminderMessages, markReminderItemsSent } from '../services/reminders.js';
 import { sendWhatsAppMessage } from '../services/baileys.js';
 import { getSafeTimezone, getSafeReminderTime, getZonedParts } from '../utils/timezone.js';
 import { getNgrokStatus, restartNgrokTunnel } from '../services/ngrok.js';
@@ -125,31 +126,24 @@ router.post('/schedules/:id/remind-now', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Cronograma não encontrado' });
     }
 
-    const itemsByPhone = new Map();
-    for (const item of schedule.items) {
-      if (item.is_immutable || !item.responsible_phone) continue;
+    const items = selectReminderItems(schedule, req.body?.item_ids);
 
-      if (!itemsByPhone.has(item.responsible_phone)) {
-        itemsByPhone.set(item.responsible_phone, {
-          name: item.responsible_name || 'Irmão(ã)',
-          items: []
-        });
-      }
-      itemsByPhone.get(item.responsible_phone).items.push(item);
+    if (!items) {
+      return res.status(400).json({ success: false, error: 'Selecione momentos válidos deste cronograma com telefone do responsável.' });
     }
 
-    if (itemsByPhone.size === 0) {
-      return res.json({ success: true, message: 'Nenhum responsável com itens mutáveis para lembrar.' });
-    }
+    // Suspende o automático antes do primeiro envio para não alcançar outros responsáveis.
+    markReminderItemsSent(db, schedule, [], { suppressAutomatic: true });
+    const { sentItems, sentCount, totalCount } = await sendReminderMessages(schedule, items, sendWhatsAppMessage);
+    if (sentItems.length > 0) markReminderItemsSent(db, schedule, sentItems, { suppressAutomatic: true });
 
-    let sentCount = 0;
-    for (const [phone, data] of itemsByPhone.entries()) {
-      const message = formatReminderMessage(data.name, schedule, data.items);
-      const sent = await sendWhatsAppMessage(phone, message);
-      if (sent) sentCount++;
+    if (sentCount < totalCount) {
+      return res.status(502).json({
+        success: false,
+        error: `Lembretes enviados para ${sentCount} de ${totalCount} responsável(is). Verifique a conexão do WhatsApp e tente novamente para os demais.`,
+        sent_item_ids: sentItems.map(item => item.id)
+      });
     }
-
-    db.prepare('UPDATE schedules SET reminder_sent = 1 WHERE id = ?').run(schedule.id);
     res.json({ success: true, message: `Lembretes enviados para ${sentCount} responsável(is).` });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

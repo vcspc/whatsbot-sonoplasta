@@ -43,7 +43,8 @@ db.exec(`
     responsible_name TEXT DEFAULT '',
     responsible_phone TEXT DEFAULT '',
     is_immutable INTEGER DEFAULT 0,
-    is_filled INTEGER DEFAULT 0
+    is_filled INTEGER DEFAULT 0,
+    reminder_sent_for_date TEXT DEFAULT ''
   );
 
   CREATE TABLE IF NOT EXISTS conversation_history (
@@ -70,6 +71,25 @@ db.exec(`
     expires_at INTEGER NOT NULL
   );
 `);
+
+// Cronogramas existentes podem ter sido criados antes do controle por momento.
+const itemColumns = db.prepare('PRAGMA table_info(schedule_items)').all();
+if (!itemColumns.some(column => column.name === 'reminder_sent_for_date')) {
+  db.exec('BEGIN');
+  try {
+    db.exec("ALTER TABLE schedule_items ADD COLUMN reminder_sent_for_date TEXT DEFAULT ''");
+    db.exec(`
+      UPDATE schedule_items
+      SET reminder_sent_for_date = (SELECT next_run_date FROM schedules WHERE schedules.id = schedule_items.schedule_id)
+      WHERE is_immutable = 0 AND responsible_phone <> ''
+        AND schedule_id IN (SELECT id FROM schedules WHERE reminder_sent = 1)
+    `);
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+}
 
 // Helpers para mapeamento de LID (Linked Device ID) para Telefone Real
 export function saveLidMapping(lid, phone) {
