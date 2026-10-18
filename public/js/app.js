@@ -789,9 +789,15 @@ const app = {
       if (schedule.items && schedule.items.length > 0) {
         itemsHtml = `
           <div class="mt-4 border-t border-slate-700/50 pt-4">
-            <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center justify-between">
-              <span>Momentos do Culto (${schedule.items.length})</span>
-            </h4>
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Momentos do Culto (${schedule.items.length})</h4>
+              ${schedule.items.some(item => !item.is_immutable && item.responsible_phone) ? `
+                <div class="flex flex-wrap items-center gap-2">
+                  <button type="button" onclick="app.setReminderSelection(this, true)" class="text-xs font-semibold text-amber-300 hover:text-amber-200 px-2 py-1 rounded-lg hover:bg-amber-500/15 transition">Selecionar todos</button>
+                  <button type="button" onclick="app.setReminderSelection(this, false)" class="text-xs font-semibold text-slate-300 hover:text-white px-2 py-1 rounded-lg hover:bg-slate-700/50 transition">Desmarcar todos</button>
+                </div>
+              ` : ''}
+            </div>
             <div class="space-y-2">
         `;
 
@@ -904,6 +910,11 @@ const app = {
     } catch (err) {
       this.showAlert(`Erro: ${err.message}`, 'error');
     }
+  },
+
+  setReminderSelection(button, checked) {
+    const card = button.closest('.glass-card');
+    card.querySelectorAll('.reminder-item').forEach(input => { input.checked = checked; });
   },
 
   async remindNow(scheduleId, button) {

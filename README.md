@@ -12,7 +12,7 @@ Bot inteligente de WhatsApp construído com **@whiskeysockets/baileys**, **Googl
    - Definição de **Itens Imutáveis / Fixos**: momentos que possuem conteúdo pré-definido permanente (ex: "Oração de Abertura") e que o bot não precisa solicitar a ninguém.
    - Visualização em tempo real do QR Code do WhatsApp para conexão direta no navegador.
    - Configuração do telefone do Sonoplasta e chave da API do Gemini.
-   - Envio imediato do cronograma ao Sonoplasta e seleção dos momentos para **Lembrar Agora**: marque apenas os momentos desejados e clique no botão do cronograma. O lembrete inclui somente os selecionados e é enviado apenas aos telefones dos respectivos responsáveis; momentos fixos ou sem telefone não podem ser selecionados.
+   - Envio imediato do cronograma ao Sonoplasta e seleção dos momentos para **Lembrar Agora**: marque os momentos individualmente ou use **Selecionar todos** / **Desmarcar todos** no cronograma. O lembrete inclui somente os selecionados e é enviado apenas aos telefones dos respectivos responsáveis; momentos fixos ou sem telefone não podem ser selecionados.
 
 2. **Lembretes Automáticos na Véspera**:
    - O bot identifica os cronogramas que acontecerão no dia seguinte.

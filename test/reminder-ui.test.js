@@ -45,6 +45,48 @@ test('cronograma exibe seleção somente para momentos mutáveis com telefone', 
   assert.equal(cards.length, 1);
   assert.equal((cards[0].innerHTML.match(/class="reminder-item/g) || []).length, 1);
   assert.match(cards[0].innerHTML, /value="11" aria-label="Selecionar momento 1 para lembrete"/);
+  assert.match(cards[0].innerHTML, /Selecionar todos/);
+  assert.match(cards[0].innerHTML, /Desmarcar todos/);
+});
+
+test('cronograma sem momentos elegíveis não exibe controles de seleção em massa', () => {
+  const cards = [];
+  const app = runInNewContext(`${script}\napp`, {
+    window: {},
+    document: {
+      addEventListener() {},
+      getElementById: id => id === 'schedules-list' ? { innerHTML: '', appendChild: card => cards.push(card) } : null,
+      createElement: () => ({ className: '', innerHTML: '' })
+    }
+  });
+  app.schedules = [{
+    id: 1, title: 'Culto', recurrence: 'ONCE', next_run_date: '2026-10-18', event_time: '19:30',
+    items: [{ id: 12, item_order: 1, item_time: '19:30', name: 'Oração', responsible_phone: '5511999992222', is_immutable: 1 }]
+  }];
+  app.renderSchedules();
+  assert.doesNotMatch(cards[0].innerHTML, /Selecionar todos|Desmarcar todos/);
+});
+
+test('selecionar e desmarcar todos afeta somente momentos elegíveis do cronograma acionado', async () => {
+  const firstItems = [{ value: '11', checked: false }, { value: '12', checked: false }];
+  const secondItems = [{ value: '21', checked: true }];
+  const firstCard = { querySelectorAll: selector => selector === '.reminder-item' ? firstItems : firstItems.filter(input => input.checked) };
+  const secondCard = { querySelectorAll: selector => selector === '.reminder-item' ? secondItems : secondItems.filter(input => input.checked) };
+  const firstButton = { closest: () => firstCard, disabled: false };
+  const secondButton = { closest: () => secondCard, disabled: false };
+  const { app, requests } = makeApp(firstItems);
+
+  app.setReminderSelection(firstButton, true);
+  assert.deepEqual(firstItems.map(input => input.checked), [true, true]);
+  assert.equal(secondItems[0].checked, true);
+  await app.remindNow(1, { ...firstButton, closest: () => firstCard });
+  assert.deepEqual(JSON.parse(requests[0].options.body), { item_ids: [11, 12] });
+
+  app.setReminderSelection(secondButton, false);
+  assert.equal(secondItems[0].checked, false);
+  app.setReminderSelection(firstButton, true);
+  app.setReminderSelection(firstButton, false);
+  assert.deepEqual(firstItems.map(input => input.checked), [false, false]);
 });
 
 test('botão não faz requisição sem momentos marcados', async () => {
